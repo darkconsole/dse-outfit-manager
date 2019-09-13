@@ -7,9 +7,13 @@ Event OnPlayerLoadGame()
 	Return
 EndEvent
 
-
 Event OnLocationChange(Location LocPrev, Location LocNew)
-	Main.UpdateLoadedActors()
+
+	If(LocNew != None)
+		Debug.Notification("OnLocationChange " + LocNew.GetName())
+		Main.UpdateLoadedActors()
+	EndIf
+
 	Return
 EndEvent
 
