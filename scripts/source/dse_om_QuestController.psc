@@ -3,7 +3,8 @@ ScriptName dse_om_QuestController extends Quest
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-Bool Property DebugMode = TRUE Auto
+Bool Property DebugMode = TRUE Auto Hidden
+Bool Property CheckRootWorldspaces = TRUE Auto Hidden
 
 ReferenceAlias Property PlayerRef Auto
 Outfit Property OutfitNone Auto
@@ -14,6 +15,24 @@ Message Property MessageOutfitChooseCondition2 Auto
 
 Keyword Property LocationHome Auto
 Keyword Property LocationCity Auto
+Keyword Property LocationTown Auto
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;/*
+the root world space array is a list of all the places that i consider to be
+the most outside as you could possibly be. i decided to make this configurable
+because while we can trust sse has all the dlc, there are still other mods that
+can add new worlds. if those worlds are added to this array the "in cities"
+detection for outfits will work slightly better.
+
+the only reason this has to exist is because there is no WorldSpace.GetParent().
+if it existed i could test the existence of none to determine how worldly we
+are.
+*/;
+
+WorldSpace[] Property RootWorldSpaces Auto
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -22,6 +41,10 @@ String Property KeyActorList = "DSEOM.ActorList" AutoReadOnly Hidden
 String Property KeyActorOutfit = "DSEOM.ActorOutfit" AutoReadOnly Hidden
 String Property KeyItemList = "DSEOM.ActorItemList" AutoReadOnly Hidden
 String Property KeyOutfitList = "DSEOM.ActorOutfitList" AutoReadOnly Hidden
+
+String Property KeyOutfitWhenHome = "When: At Home" AutoReadOnly Hidden
+String Property KeyOutfitWhenCity = "When: In City" AutoReadOnly Hidden
+String Property KeyOutfitWhenWilderness = "When: Adventuring" AutoReadOnly Hidden
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -32,7 +55,7 @@ Event OnInit()
 EndEvent
 
 Event OnGainLOS(Actor Viewer, ObjectReference Who)
-
+	self.ActorTryToSetCurrentOutfitByLocation(Who As Actor)
 	self.ActorRefreshOutfit(Who As Actor)
 	Return
 EndEvent
@@ -56,6 +79,9 @@ Function UpdateLoadedActors()
 		Who = StorageUtil.FormListGet(NONE,self.KeyActorList,Iter) As Actor
 
 		If(Who != None && Who.Is3dLoaded())
+			;; here we use the LOS pick to avoid setting actors in
+			;; other zones. like when i told my follower to wait outside in
+			;; whiterun she would be flipping outfits still for no reason.
 			self.UnregisterForLOS(Player,Who)
 			self.RegisterForSingleLOSGain(Player,Who)
 		EndIf
@@ -169,11 +195,14 @@ Function MenuActorOutfitCreateLocationTyped(Actor Who)
 	Int Result = self.MessageOutfitChooseCondition2.Show()
 
 	If(Result == 0)
-		Debug.MessageBox("TODO: Make Home Outfit")
+		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenHome)
+		self.ActorRegister(Who)
 	ElseIf(Result == 1)
-		Debug.MessageBox("TODO: Make City Outfit")
+		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenCity)
+		self.ActorRegister(Who)
 	ElseIf(Result == 2)
-		Debug.MessageBox("TODO: Make Adventuring Outfit")
+		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+		self.ActorRegister(Who)
 	EndIf
 
 	Return
@@ -486,6 +515,55 @@ Function ActorCopyOutfit(Actor From, Actor To, String OutfitName, Bool FreeShit=
 	self.ActorRefreshOutfit(To,FreeShit)
 
 	Return
+EndFunction
+
+Function ActorTryToSetCurrentOutfitByLocation(Actor Who)
+
+	Location Where = Game.GetPlayer().GetCurrentLocation()
+
+	If(Where != NONE)
+		If(Where.HasKeyword(LocationHome) && self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
+			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenHome)
+		ElseIf(Where.HasKeyword(LocationCity) && self.IsPlayerReallyInTheCityTho() && self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
+			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenCity)
+		ElseIf(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+		EndIf
+	Else
+		If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+		EndIf
+	EndIf
+
+	Return
+EndFunction
+
+Bool Function IsPlayerReallyInTheCityTho()
+{are we really really tho?}
+
+	WorldSpace World = self.PlayerRef.GetActorRef().GetWorldSpace()
+	Int Iter = 0
+
+	;; the reason this function exists is because a large area outside of
+	;; city walls still gets tagged as "city" - like the farms that are
+	;; around whiterun. this will help us determine if we actually stepped
+	;; outside of city walls.
+
+	If(!self.CheckRootWorldSpaces)
+		;; if we don't want to check just lie. this will make you stay in
+		;; your city clothes until you get a fair distance away from the
+		;; city in question.
+		Return TRUE
+	EndIf
+
+	While(Iter < self.RootWorldSpaces.Length)
+		If(World == self.RootWorldSpaces[Iter])
+			Return FALSE
+		EndIf
+		Iter += 1
+	EndWhile
+
+	Return TRUE
 EndFunction
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
