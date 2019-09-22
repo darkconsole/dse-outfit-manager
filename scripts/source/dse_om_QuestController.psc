@@ -55,8 +55,17 @@ Event OnInit()
 EndEvent
 
 Event OnGainLOS(Actor Viewer, ObjectReference Who)
-	self.ActorTryToSetCurrentOutfitByLocation(Who As Actor)
-	self.ActorRefreshOutfit(Who As Actor)
+	String Oldfit = self.ActorGetCurrentOutfit(Who As Actor)
+	String Newfit
+
+	;;;;;;;;
+
+	Newfit = self.ActorTryToSetCurrentOutfitByLocationType(Who As Actor)
+
+	If(Newfit != Oldfit)
+		self.ActorRefreshOutfit(Who As Actor)
+	EndIf
+
 	Return
 EndEvent
 
@@ -153,7 +162,9 @@ Function MenuActorOutfitCopy(Actor Who)
 	From = self.MenuRegisteredActorList()
 	OutfitName = self.MenuActorOutfitList(Who)
 
-	self.ActorCopyOutfit(From,Who,OutfitName,TRUE)
+	If(OutfitName != "")
+		self.ActorCopyOutfit(From,Who,OutfitName,TRUE)
+	EndIf
 
 	Return
 EndFunction
@@ -161,7 +172,11 @@ EndFunction
 Function MenuActorOutfitDelete(Actor Who)
 {help the player choose an outfit to delete.}
 
-	Debug.MessageBox("TODO: Delete Outfit")
+	String OutfitName = self.MenuActorOutfitList(Who)
+
+	If(OutfitName != "")
+		self.ActorDeleteOutfit(Who,OutfitName)
+	EndIf
 
 	Return
 EndFunction
@@ -517,25 +532,57 @@ Function ActorCopyOutfit(Actor From, Actor To, String OutfitName, Bool FreeShit=
 	Return
 EndFunction
 
-Function ActorTryToSetCurrentOutfitByLocation(Actor Who)
+Function ActorDeleteOutfit(Actor Who, String OutfitName)
+
+	String OutfitKey = self.KeyItemList + "[" + OutfitName + "]"
+
+	StorageUtil.FormListClear(Who,OutfitKey)
+	StorageUtil.StringListRemove(Who,self.KeyOutfitList,OutfitName,TRUE)
+
+	Return
+EndFunction
+
+String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	Location Where = Game.GetPlayer().GetCurrentLocation()
+	Bool IsReallyInCityTho = self.IsPlayerReallyInTheCityTho()
 
 	If(Where != NONE)
-		If(Where.HasKeyword(LocationHome) && self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
-			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenHome)
-		ElseIf(Where.HasKeyword(LocationCity) && self.IsPlayerReallyInTheCityTho() && self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
-			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenCity)
-		ElseIf(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
-			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+
+		self.PrintDebug(Who.GetDisplayName() + " Location: " + Where.GetName() + ", IsInCityTho(" + (IsReallyInCityTho As Int) + ")")
+
+		;; if it looks like we are at home put on the home outfit.
+		If(Where.HasKeyword(LocationHome))
+			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
+				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenHome)
+			EndIf
+
+		;; if it looks like we are in the city put on our city outfit. if there
+		;; is no city outfit then put on our adventure outfit.
+		ElseIf(Where.HasKeyword(LocationCity) && IsReallyInCityTho)
+			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
+				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenCity)
+			ElseIf(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+			EndIf
+
+		;; else if we step outdoors put on our adventure outfit.
+		ElseIf(!IsReallyInCityTho)
+			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+			EndIf
 		EndIf
+
 	Else
+		
+		self.PrintDebug(Who.GetDisplayName() + " Location: None, IsInCityTho(" + (IsReallyInCityTho As Int) + ")")
+
 		If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
 			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
 		EndIf
 	EndIf
 
-	Return
+	Return self.ActorGetCurrentOutfit(Who)
 EndFunction
 
 Bool Function IsPlayerReallyInTheCityTho()
