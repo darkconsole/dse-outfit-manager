@@ -3,14 +3,14 @@ ScriptName dse_om_AliasPlayer extends ReferenceAlias
 dse_om_QuestController Property Main Auto
 
 Event OnPlayerLoadGame()
-	PO3_SKSEfunctions.a_UnregisterForCellFullyLoaded(self)
-	PO3_SKSEfunctions.a_RegisterForCellFullyLoaded(self)
+	;;PO3_SKSEfunctions.a_UnregisterForCellFullyLoaded(self)
+	;;PO3_SKSEfunctions.a_RegisterForCellFullyLoaded(self)
 
 	Main.UpdateLoadedActors()
 	Return
 EndEvent
 
-Event __OnCellLoad()
+Event OnCellLoad()
 
 	;; the thing about this event, and the wiki seems to be right about this, is
 	;; that it does not "fire reliable" as in like, if the cell was already in

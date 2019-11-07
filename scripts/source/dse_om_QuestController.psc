@@ -8,6 +8,7 @@ Bool Property CheckRootWorldspaces = TRUE Auto Hidden
 
 ReferenceAlias Property PlayerRef Auto
 Outfit Property OutfitNone Auto
+Container Property ContainOutfitter Auto
 
 Message Property MessageHello Auto
 Message Property MessageOutfitChooseCondition1 Auto
@@ -41,10 +42,13 @@ String Property KeyActorList = "DSEOM.ActorList" AutoReadOnly Hidden
 String Property KeyActorOutfit = "DSEOM.ActorOutfit" AutoReadOnly Hidden
 String Property KeyItemList = "DSEOM.ActorItemList" AutoReadOnly Hidden
 String Property KeyOutfitList = "DSEOM.ActorOutfitList" AutoReadOnly Hidden
+String Property KeyOutfitTarget = "DSEOM.ActorOutfitTarget" AutoReadOnly Hidden
+String Property KeyItemListTemp = "DSEOM.ActorItemListTemp" AutoReadOnly Hidden
 
 String Property KeyOutfitWhenHome = "When: At Home" AutoReadOnly Hidden
 String Property KeyOutfitWhenCity = "When: In City" AutoReadOnly Hidden
 String Property KeyOutfitWhenWilderness = "When: Adventuring" AutoReadOnly Hidden
+String Property KeyOutfitWhere = "Where: " AutoReadOnly Hidden
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -62,9 +66,9 @@ Event OnGainLOS(Actor Viewer, ObjectReference Who)
 
 	Newfit = self.ActorTryToSetCurrentOutfitByLocationType(Who As Actor)
 
-	If(Newfit != Oldfit)
+	;;If(Newfit != Oldfit)
 		self.ActorRefreshOutfit(Who As Actor)
-	EndIf
+	;;EndIf
 
 	Return
 EndEvent
@@ -128,11 +132,11 @@ Function MenuActorOutfitCreate(Actor Who)
 	Int Result = self.MessageOutfitChooseCondition1.Show()
 
 	If(Result == 0)
-		self.MenuActorOutfitCreateLocationBased(Who)
+		self.MenuActorOutfitCreateGeneral(Who)
 	ElseIf(Result == 1)
 		self.MenuActorOutfitCreateLocationTyped(Who)
 	ElseIf(Result == 2)
-		self.MenuActorOutfitCreateGeneral(Who)
+		self.MenuActorOutfitCreateLocationBased(Who)
 	EndIf
 
 	Return
@@ -144,8 +148,19 @@ Function MenuActorOutfitEdit(Actor Who)
 	String OutfitName = self.MenuActorOutfitList(Who)
 
 	If(OutfitName != "")
-		self.ActorSetCurrentOutfit(Who,OutfitName)
-		self.ActorRegister(Who)
+		If(Who != self.PlayerRef.GetActorRef())
+			;; equip the requested edit.
+			self.ActorSetCurrentOutfit(Who,OutfitName)
+			self.ActorRefreshOutfit(Who,FALSE,FALSE)
+
+			;; spawn the outfitter box.
+			StorageUtil.SetFormValue(NONE,self.KeyOutfitTarget,Who)
+			self.PlayerRef.GetActorRef().PlaceAtMe(self.ContainOutfitter)
+		Else
+			;; update with currently equipped stuff.
+			self.ActorSetCurrentOutfit(Who,OutfitName)
+			self.ActorRegister(Who)
+		EndIf
 	EndIf
 
 	Return
@@ -192,6 +207,7 @@ Function MenuActorOutfitCreateGeneral(Actor Who)
 
 	self.ActorSetCurrentOutfit(Who,OutfitName)
 	self.ActorRegister(Who)
+	Debug.MessageBox("Outfit \"" + self.ActorGetCurrentOutfit(Who) + "\" has been created from currently equipped items.")
 
 	Return
 EndFunction
@@ -199,7 +215,15 @@ EndFunction
 Function MenuActorOutfitCreateLocationBased(Actor Who)
 {help the player make a location based outfit.}
 
-	Debug.MessageBox("TODO: Make Location Based Outfit")
+	String LocationName = self.MenuLocationTree(Who)
+
+	If(LocationName == "")
+		Return
+	EndIf
+
+	self.ActorSetCurrentOutfit(Who,(self.KeyOutfitWhere + LocationName))
+	self.ActorRegister(Who)
+	Debug.MessageBox("Outfit \"" + self.ActorGetCurrentOutfit(Who) + "\" has been created from currently equipped items.")
 
 	Return
 EndFunction
@@ -219,6 +243,8 @@ Function MenuActorOutfitCreateLocationTyped(Actor Who)
 		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
 		self.ActorRegister(Who)
 	EndIf
+
+	Debug.MessageBox("Outfit \"" + self.ActorGetCurrentOutfit(Who) + "\" has been created from currently equipped items.")
 
 	Return
 EndFunction
@@ -281,7 +307,63 @@ String Function MenuActorOutfitList(Actor Who)
 	Return OutfitList[Result]
 EndFunction
 
-Int Function MenuFromList(String[] Items)
+String Function MenuLocationTree(Actor Who)
+{display a the location tree and return the name of the selected one.}
+
+	Int Result = 0
+	Int LocationCount = 1
+	String[] LocationList
+	String LocationName
+	Location Here
+
+	;;;;;;;;
+
+	;; determine how deep we need to go.
+
+	Here = Who.GetCurrentLocation()
+	While(Here != NONE)
+		LocationCount += 1
+		Here = PO3_SKSEFunctions.GetParentLocation(Here)
+	EndWhile
+
+	;;;;;;;;
+
+	;; then go for it.
+
+	If(LocationCount == 1)
+		Debug.MessageBox("You don't appear to be anywhere noteworthy.")
+		Return ""
+	EndIf
+
+	self.PrintDebug("Creating Location List " + LocationCount + " Long")
+	LocationList = Utility.CreateStringArray(LocationCount)
+	LocationList[0] = "[Cancel]"
+
+	Here = Who.GetCurrentLocation()
+	While(Here != NONE)
+		If(Here.GetName() != "")
+			LocationName = self.GetLocationName(Here)
+
+			If(PO3_SKSEFunctions.ArrayStringCount(LocationName,LocationList) == 0)
+				self.PrintDebug("Adding " + LocationName + " to Location List")
+				PO3_SKSEFunctions.AddStringToArray(LocationName,LocationList)
+			EndIf
+		EndIf
+		Here = PO3_SKSEFunctions.GetParentLocation(Here)
+	EndWhile
+
+	;;;;;;;;
+
+	Result = self.MenuFromList(LocationList)
+
+	If(Result <= 0)
+		Return ""
+	EndIf
+
+	Return LocationList[Result]
+EndFunction
+
+Int Function MenuFromList(String[] Items, Bool AllowEmpty=FALSE)
 {display a list from an array of items.}
 
 	UIListMenu Menu = UIExtensions.GetMenu("UIListMenu",TRUE) as UIListMenu
@@ -292,7 +374,9 @@ Int Function MenuFromList(String[] Items)
 	;;;;;;;;
 
 	While(Iter < Items.Length)
-		Menu.AddEntryItem(Items[Iter],NoParent)
+		If(Items[Iter] != "" || AllowEmpty)
+			Menu.AddEntryItem(Items[Iter],NoParent)
+		EndIf
 		Iter += 1
 	EndWhile
 
@@ -337,12 +421,12 @@ Function ActorRegister(Actor Who)
 		Who.SetOutfit(self.OutfitNone,TRUE)
 
 		;; open their inventory.
-		Who.SetPlayerTeammate(TRUE)
-		Who.OpenInventory(TRUE)
-		Utility.Wait(0.20)
+		;;Who.SetPlayerTeammate(TRUE)
+		;;Who.OpenInventory(TRUE)
+		;;Utility.Wait(0.20)
 
 		If(ShouldCancel)
-			Who.SetPlayerTeammate(FALSE)
+		;;	Who.SetPlayerTeammate(FALSE)
 		EndIf
 	EndIf
 
@@ -528,7 +612,14 @@ Function ActorCopyOutfit(Actor From, Actor To, String OutfitName, Bool FreeShit=
 	StorageUtil.FormListCopy(To,OutfitKey,ItemList)
 
 	self.ActorRefreshOutfit(To,FreeShit)
+	Return
+EndFunction
 
+Function ActorEmptyOutfit(Actor Who, String OutfitName)
+
+	String OutfitKey = self.ActorGetCurrentKey(Who)
+
+	StorageUtil.FormListClear(Who,OutfitKey)
 	Return
 EndFunction
 
@@ -539,10 +630,22 @@ Function ActorDeleteOutfit(Actor Who, String OutfitName)
 	StorageUtil.FormListClear(Who,OutfitKey)
 	StorageUtil.StringListRemove(Who,self.KeyOutfitList,OutfitName,TRUE)
 
+	;; if we deleted the current outfit censor it out.
+
+	If(self.ActorGetCurrentOutfit(Who) == OutfitName)
+		StorageUtil.UnsetStringValue(Who,self.KeyActorOutfit)
+	EndIf
+
+	;; if we deleted the last outfit unregister.
+
+	If(StorageUtil.StringListCount(Who,self.KeyOutfitList) == 0)
+		self.ActorUnregister(Who)
+	EndIf
+
 	Return
 EndFunction
 
-String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
+String Function _ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	Location Where = Game.GetPlayer().GetCurrentLocation()
 	Bool IsReallyInCityTho = self.IsPlayerReallyInTheCityTho()
@@ -611,6 +714,119 @@ Bool Function IsPlayerReallyInTheCityTho()
 	EndWhile
 
 	Return TRUE
+EndFunction
+
+Bool Function IsPlayerInCity()
+
+	Location Here = self.PlayerRef.GetActorRef().GetCurrentLocation()
+
+	While(Here != None)
+		If(Here.HasKeyword(LocationCity))
+			Return TRUE
+		EndIf
+
+		Here = PO3_SKSEFunctions.GetParentLocation(Here)
+	EndWhile
+
+	Return FALSE
+EndFunction
+
+String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
+
+	Location Here = NONE
+	String KeyWhere = ""
+	String OutfitName = ""
+	Bool OutfitHome = FALSE
+	Bool OutfitCity = FALSE
+	Bool InHome = FALSE
+	Bool InCity = FALSE
+
+	;; most in game locations are nested such that thanks to the function added to
+	;; papyrus extender by powerofthree we can traverse the location tree and determine
+	;; if we have an outfit for a specific place.
+
+	;; Bards College > Solitude Avenues > Solitude > Halfingaar > Tamriel
+
+	;; imagine if you will being a stormcloak forced into the army because your dad
+	;; was a douche but your passion really lies with singing and telling stories.
+	;; with this ability we can do something like set a specific outfit while we are
+	;; wandering ANYWHERE in Halfingaar, like a Solitude guard's disguise. we would
+	;; continue to wear this entering solitude, and even the bards college. but then
+	;; within the bards college we could specify a more casual outfit to switch to.
+	;; then we we leave the college it would traverse the tree and find it should be
+	;; wearing the halfingaar outfit again.
+
+	;;;;;;;;
+
+	Here = self.PlayerRef.GetActorRef().GetCurrentLocation()
+	While(Here != NONE)
+		KeyWhere = self.KeyOutfitWhere + self.GetLocationName(Here)
+
+		;; note the first specific outfit we find. but if the outfit is flagged
+		;; as being a city outfit we only want to use it if we're actually
+		;; in one of the cities and not the surrounding suburbs.
+
+		If(OutfitName == "" && self.ActorHasOutfit(Who,KeyWhere))
+			If(StringUtil.Find(KeyWhere,"[City]") >= 0)
+				If(self.IsPlayerReallyInTheCityTho())
+					OutfitName = KeyWhere
+				EndIf
+			Else
+				OutfitName = KeyWhere
+			EndIf
+		EndIf
+
+		;; note the type of location we are in.
+
+		If(Here.HasKeyword(LocationHome))
+			InHome = TRUE
+
+			If(OutfitName != "")
+				OutfitHome = TRUE
+			EndIf
+		ElseIf(Here.HasKeyword(LocationCity))	
+			InCity = TRUE
+
+			If(OutfitName != "")
+				OutfitCity = TRUE
+			EndIf
+		EndIf
+
+		Here = PO3_SKSEFunctions.GetParentLocation(Here)
+	EndWhile
+
+	;;;;;;;;
+
+	If(OutfitName != "")
+		self.ActorSetCurrentOutfit(Who,OutfitName)
+		Return OutfitName
+	EndIf
+
+	If(InHome && self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
+		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenHome)
+	ElseIf(InCity && self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
+		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenCity)
+	ElseIf(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+	EndIf
+
+	Return self.ActorGetCurrentOutfit(Who)
+EndFunction
+
+String Function GetLocationName(Location Here)
+{this is to try and tell the difference between places like "whiterun" and
+"whiterun" where one of them means the greater area and one of them means
+the literal downtown.}
+
+	String LocationName = Here.GetName()
+
+		If(Here.HasKeyword(LocationCity))
+			LocationName += " [City]"
+		ElseIf(Here.HasKeyword(LocationTown))
+			LocationName += " [Town]"
+		EndIf
+
+	Return LocationName
 EndFunction
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
