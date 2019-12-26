@@ -44,6 +44,8 @@ String Property KeyItemList = "DSEOM.ActorItemList" AutoReadOnly Hidden
 String Property KeyOutfitList = "DSEOM.ActorOutfitList" AutoReadOnly Hidden
 String Property KeyOutfitTarget = "DSEOM.ActorOutfitTarget" AutoReadOnly Hidden
 String Property KeyItemListTemp = "DSEOM.ActorItemListTemp" AutoReadOnly Hidden
+String Property KeyOutfitAuto = "DSEOM.ActorOutfitAuto" AutoReadOnly Hidden
+String Property KeyActorLocation = "DSEOM.ActorLocationLast" AutoReadOnly Hidden
 
 String Property KeyOutfitWhenHome = "When: At Home" AutoReadOnly Hidden
 String Property KeyOutfitWhenCity = "When: In City" AutoReadOnly Hidden
@@ -371,6 +373,8 @@ Int Function MenuFromList(String[] Items, Bool AllowEmpty=FALSE)
 	Int Iter = 0
 	Int Result
 
+	self.SortStringList(Items)
+
 	;;;;;;;;
 
 	While(Iter < Items.Length)
@@ -585,10 +589,32 @@ String Function ActorGetCurrentOutfit(Actor Who)
 	Return StorageUtil.GetStringValue(Who,self.KeyActorOutfit,"Default")
 EndFunction
 
+Bool Function ActorGetOutfitAuto(Actor Who)
+
+	Return (StorageUtil.GetIntValue(Who,self.KeyOutfitAuto,1) == 1)
+EndFunction
+
+Function ActorSetOutfitAuto(Actor Who, Bool What)
+
+	If(What)
+		StorageUtil.SetIntValue(Who,self.KeyOutfitAuto,1)
+	Else
+		StorageUtil.SetIntValue(Who,self.KeyOutfitAuto,0)
+	EndIf
+
+	Return
+EndFunction
+
 Function ActorSetCurrentOutfit(Actor Who, String OutfitName)
 
 	StorageUtil.SetStringValue(Who,self.KeyActorOutfit,OutfitName)
-	Storageutil.StringListAdd(Who,self.KeyOutfitList,OutfitName,FALSE)
+	StorageUtil.StringListAdd(Who,self.KeyOutfitList,OutfitName,FALSE)
+
+	;; remember where we were when we set it. this is for the automatic
+	;; outfit selection to abandon itself if the location has not changed
+	;; for things like on save load.
+
+	StorageUtil.SetFormValue(Who,self.KeyActorLocation,Who.GetCurrentLocation())
 
 	Return
 EndFunction
@@ -734,12 +760,27 @@ EndFunction
 String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	Location Here = NONE
+	Location Prev = NONE
 	String KeyWhere = ""
 	String OutfitName = ""
 	Bool OutfitHome = FALSE
 	Bool OutfitCity = FALSE
 	Bool InHome = FALSE
 	Bool InCity = FALSE
+
+	;;;;;;;;
+
+	Here = self.PlayerRef.GetActorRef().GetCurrentLocation()
+	Prev = StorageUtil.GetFormValue(Who,self.KeyActorLocation) As Location
+
+	If(Prev != NONE && Here == Prev)
+		;; if the location hasn't changed then don't try to recalculate
+		;; *which* outfit to wear. e.g. stop putting adventurer on every
+		;; time we load a save.
+		Return self.ActorGetCurrentOutfit(Who)
+	EndIf
+
+	;;;;;;;;
 
 	;; most in game locations are nested such that thanks to the function added to
 	;; papyrus extender by powerofthree we can traverse the location tree and determine
@@ -758,7 +799,6 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	;;;;;;;;
 
-	Here = self.PlayerRef.GetActorRef().GetCurrentLocation()
 	While(Here != NONE)
 		KeyWhere = self.KeyOutfitWhere + self.GetLocationName(Here)
 
@@ -846,6 +886,35 @@ Function PrintDebug(String Msg)
 		MiscUtil.PrintConsole("[DOM] " + Msg)
 		Debug.Trace("[DOM] " + Msg)
 	EndIf
+
+	Return
+EndFunction
+
+Function SortStringList(String[] ItemName)
+{setting UIListMenu sort property to TRUE not only does not sort items but it
+also makes the items unselectable. so now i've had to implement my own bubble
+sort.}
+
+	String TmpName
+	Int Iter
+	Bool Changed = TRUE
+
+	While(Changed)
+		Iter = 0
+		Changed = FALSE
+
+		While(Iter < (ItemName.Length - 1))
+
+			If(ItemName[Iter] > ItemName[(Iter+1)])
+				TmpName = ItemName[Iter]
+				ItemName[Iter] = ItemName[(Iter+1)]
+				ItemName[(Iter+1)] = TmpName
+				Changed = TRUE
+			EndIf
+
+			Iter += 1
+		EndWhile
+	EndWhile
 
 	Return
 EndFunction
