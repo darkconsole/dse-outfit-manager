@@ -678,53 +678,10 @@ Function ActorDeleteOutfit(Actor Who, String OutfitName)
 	Return
 EndFunction
 
-String Function _ActorTryToSetCurrentOutfitByLocationType(Actor Who)
-
-	Location Where = Game.GetPlayer().GetCurrentLocation()
-	Bool IsReallyInCityTho = self.IsPlayerReallyInTheCityTho()
-
-	If(Where != NONE)
-
-		self.PrintDebug(Who.GetDisplayName() + " Location: " + Where.GetName() + ", IsInCityTho(" + (IsReallyInCityTho As Int) + ")")
-
-		;; if it looks like we are at home put on the home outfit.
-		If(Where.HasKeyword(LocationHome))
-			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
-				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenHome)
-			EndIf
-
-		;; if it looks like we are in the city put on our city outfit. if there
-		;; is no city outfit then put on our adventure outfit.
-		ElseIf(Where.HasKeyword(LocationCity) && IsReallyInCityTho)
-			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
-				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenCity)
-			ElseIf(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
-				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
-			EndIf
-
-		;; else if we step outdoors put on our adventure outfit.
-		ElseIf(!IsReallyInCityTho)
-			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
-				self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
-			EndIf
-		EndIf
-
-	Else
-		
-		self.PrintDebug(Who.GetDisplayName() + " Location: None, IsInCityTho(" + (IsReallyInCityTho As Int) + ")")
-
-		If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
-			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
-		EndIf
-	EndIf
-
-	Return self.ActorGetCurrentOutfit(Who)
-EndFunction
-
-Bool Function IsPlayerReallyInTheCityTho()
+Bool Function IsActorReallyInTheCityTho(Actor Who)
 {are we really really tho?}
 
-	WorldSpace World = self.PlayerRef.GetActorRef().GetWorldSpace()
+	WorldSpace World = Who.GetWorldSpace()
 	Int Iter = 0
 
 	;; the reason this function exists is because a large area outside of
@@ -741,13 +698,13 @@ Bool Function IsPlayerReallyInTheCityTho()
 
 	While(Iter < self.RootWorldSpaces.Length)
 		If(World == self.RootWorldSpaces[Iter])
-			self.PrintDebug("Player is in open world")
+			self.PrintDebug(Who.GetDisplayName() + " is in open world")
 			Return FALSE
 		EndIf
 		Iter += 1
 	EndWhile
 
-	self.PrintDebug("Player is not in open world")
+	self.PrintDebug(Who.GetDisplayName() + " is not in open world")
 	Return TRUE
 EndFunction
 
@@ -821,7 +778,7 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 		
 		If(self.ActorHasOutfit(Who,KeyWhere))
 			If(StringUtil.Find(KeyWhere,"[City]") >= 0)
-				If(self.IsPlayerReallyInTheCityTho())
+				If(self.IsActorReallyInTheCityTho(Who))
 					OutfitName = KeyWhere
 				EndIf
 			Else
@@ -844,7 +801,7 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 	;; try to find an outfit that matches the type of place we are in
 	;; crawling up the location tree until we find a match.
 
-	Here = self.PlayerRef.GetActorRef().GetCurrentLocation()
+	Here = Who.GetCurrentLocation()
 
 	While(Here != NONE)
 
@@ -857,7 +814,7 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 			EndIf
 		ElseIf(Here.HasKeyword(LocationCity))
 			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
-				If(self.IsPlayerReallyInTheCityTho())
+				If(self.IsActorReallyInTheCityTho(Who))
 					OutfitName = self.KeyOutfitWhenCity
 					self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
 				Else
