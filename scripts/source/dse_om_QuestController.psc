@@ -46,6 +46,7 @@ String Property KeyOutfitTarget = "DSEOM.ActorOutfitTarget" AutoReadOnly Hidden
 String Property KeyItemListTemp = "DSEOM.ActorItemListTemp" AutoReadOnly Hidden
 String Property KeyOutfitAuto = "DSEOM.ActorOutfitAuto" AutoReadOnly Hidden
 String Property KeyActorLocation = "DSEOM.ActorLocationLast" AutoReadOnly Hidden
+String Property KeyActorWorldSpace = "DSEOM.ActorWorldSpaceLast" AutoReadOnly Hidden
 
 String Property KeyOutfitWhenHome = "When: At Home" AutoReadOnly Hidden
 String Property KeyOutfitWhenCity = "When: In City" AutoReadOnly Hidden
@@ -83,6 +84,11 @@ Function UpdateLoadedActors()
 	Int Iter
 	Actor Who
 	Actor Player = Game.GetPlayer()
+
+	If(Player.IsInCombat())
+		;; anti disruption
+		Return
+	EndIf
 
 	;; quick cleanup. should magic stop tracking actors that were destroyed or
 	;; uninstalled from the players game.
@@ -615,6 +621,7 @@ Function ActorSetCurrentOutfit(Actor Who, String OutfitName)
 	;; for things like on save load.
 
 	StorageUtil.SetFormValue(Who,self.KeyActorLocation,Who.GetCurrentLocation())
+	StorageUtil.SetFormValue(Who,self.KeyActorWorldSpace,Who.GetWorldSpace())
 
 	Return
 EndFunction
@@ -734,11 +741,13 @@ Bool Function IsPlayerReallyInTheCityTho()
 
 	While(Iter < self.RootWorldSpaces.Length)
 		If(World == self.RootWorldSpaces[Iter])
+			self.PrintDebug("Player is in open world")
 			Return FALSE
 		EndIf
 		Iter += 1
 	EndWhile
 
+	self.PrintDebug("Player is not in open world")
 	Return TRUE
 EndFunction
 
@@ -761,6 +770,8 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	Location Here = NONE
 	Location Prev = NONE
+	WorldSpace PrevWorld = NONE
+	WorldSpace HereWorld = NONE
 	String KeyWhere = ""
 	String OutfitName = ""
 	Bool OutfitHome = FALSE
@@ -770,10 +781,12 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	;;;;;;;;
 
-	Here = self.PlayerRef.GetActorRef().GetCurrentLocation()
+	Here = Who.GetCurrentLocation()
 	Prev = StorageUtil.GetFormValue(Who,self.KeyActorLocation) As Location
+	HereWorld = Who.GetWorldSpace()
+	PrevWorld = StorageUtil.GetFormValue(Who,self.KeyActorWorldSpace) As WorldSpace
 
-	If(Prev != NONE && Here == Prev)
+	If((Prev != NONE && Here == Prev) && (PrevWorld != None && HereWorld == PrevWorld))
 		;; if the location hasn't changed then don't try to recalculate
 		;; *which* outfit to wear. e.g. stop putting adventurer on every
 		;; time we load a save.
@@ -799,14 +812,14 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	;;;;;;;;
 
+	;; try to find an outfit for this specific location, crawling up the location
+	;; tree until we find one that matches.
+
 	While(Here != NONE)
 		KeyWhere = self.KeyOutfitWhere + self.GetLocationName(Here)
-
-		;; note the first specific outfit we find. but if the outfit is flagged
-		;; as being a city outfit we only want to use it if we're actually
-		;; in one of the cities and not the surrounding suburbs.
-
-		If(OutfitName == "" && self.ActorHasOutfit(Who,KeyWhere))
+		self.PrintDebug(Who.GetDisplayName() + " checking for: " + KeyWhere)
+		
+		If(self.ActorHasOutfit(Who,KeyWhere))
 			If(StringUtil.Find(KeyWhere,"[City]") >= 0)
 				If(self.IsPlayerReallyInTheCityTho())
 					OutfitName = KeyWhere
@@ -816,38 +829,61 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 			EndIf
 		EndIf
 
-		;; note the type of location we are in.
+		If(OutfitName != "")
+			self.ActorSetCurrentOutfit(Who,OutfitName)		
+			Return OutfitName
+		Endif
+
+		Here = PO3_SKSEFunctions.GetParentLocation(Here)
+	EndWhile
+
+	self.PrintDebug(Who.GetDisplayName() + " has no location aware outfits")
+
+	;;;;;;;;
+
+	;; try to find an outfit that matches the type of place we are in
+	;; crawling up the location tree until we find a match.
+
+	Here = self.PlayerRef.GetActorRef().GetCurrentLocation()
+
+	While(Here != NONE)
 
 		If(Here.HasKeyword(LocationHome))
-			InHome = TRUE
-
-			If(OutfitName != "")
-				OutfitHome = TRUE
+			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
+				OutfitName = self.KeyOutfitWhenHome
+				self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
+			Else
+				self.PrintDebug(Who.GetDisplayName() + " has no home outfit")
 			EndIf
-		ElseIf(Here.HasKeyword(LocationCity))	
-			InCity = TRUE
-
-			If(OutfitName != "")
-				OutfitCity = TRUE
+		ElseIf(Here.HasKeyword(LocationCity))
+			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
+				If(self.IsPlayerReallyInTheCityTho())
+					OutfitName = self.KeyOutfitWhenCity
+					self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
+				Else
+					self.PrintDebug(Who.GetDisplayName() + " has no city outfit")
+				EndIf
 			EndIf
 		EndIf
+
+		If(OutfitName != "")
+			self.ActorSetCurrentOutfit(Who,OutfitName)		
+			Return OutfitName
+		Endif
 
 		Here = PO3_SKSEFunctions.GetParentLocation(Here)
 	EndWhile
 
 	;;;;;;;;
 
-	If(OutfitName != "")
-		self.ActorSetCurrentOutfit(Who,OutfitName)
-		Return OutfitName
-	EndIf
+	;; if we failed to find a specific location or type of place outfit
+	;; and we have an adventure outfit, put it on.
 
-	If(InHome && self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
-		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenHome)
-	ElseIf(InCity && self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
-		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenCity)
-	ElseIf(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+	If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+		self.PrintDebug(Who.GetDisplayName() + " found " + self.KeyOutfitWhenWilderness)
 		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+	Else
+		self.PrintDebug(Who.GetDisplayName() + " has no type of place outfits")
 	EndIf
 
 	Return self.ActorGetCurrentOutfit(Who)

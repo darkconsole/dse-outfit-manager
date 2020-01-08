@@ -5,7 +5,7 @@ dse_om_QuestController Property Main Auto
 Event OnPlayerLoadGame()
 	;;PO3_SKSEfunctions.a_UnregisterForCellFullyLoaded(self)
 	;;PO3_SKSEfunctions.a_RegisterForCellFullyLoaded(self)
-
+	
 	Main.UpdateLoadedActors()
 	Return
 EndEvent
