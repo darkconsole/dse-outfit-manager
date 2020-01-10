@@ -474,7 +474,9 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 
 		If(Item != None)
 			If(!StorageUtil.FormListHas(Who,OutfitKey,Item))
-				Who.UnequipItem(Item,Block,TRUE)
+				If(!Item.HasKeywordString("zad_Lockable"))
+					Who.UnequipItem(Item,Block,TRUE)
+				EndIf
 			EndIf
 		EndIf
 
@@ -515,7 +517,11 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
 		If(Item != None)
 			If((Item As Armor != None) || (Item As Weapon != None))
 				If(FreeShit || Who.GetItemCount(Item) > 0)
-					Who.EquipItem(Item,Lock,TRUE)
+					If(Item.HasKeywordString("zad_Lockable"))
+						;;(Game.GetFormFromFile(0x00F624,"Devious Devices - Integration.esm") As zadLibs).ManipulateDevice(Who,(Item As Armor),TRUE)
+					Else
+						Who.EquipItem(Item,Lock,TRUE)
+					EndIf
 				EndIf
 			EndIf
 		EndIf
