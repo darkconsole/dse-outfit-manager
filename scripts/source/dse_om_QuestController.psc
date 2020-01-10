@@ -129,6 +129,8 @@ Function Hello(Actor Who)
 		self.MenuActorOutfitCopy(Who)
 	ElseIf(Result == 4)
 		self.MenuActorOutfitDelete(Who)
+	ElseIf(Result == 5)
+		Who.OpenInventory(TRUE)
 	EndIf
 
 	Return
