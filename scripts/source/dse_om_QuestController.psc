@@ -170,6 +170,7 @@ Function MenuActorOutfitEdit(Actor Who)
 			;; update with currently equipped stuff.
 			self.ActorSetCurrentOutfit(Who,OutfitName)
 			self.ActorRegister(Who)
+			Debug.MessageBox("Outfit \"" + self.ActorGetCurrentOutfit(Who) + "\" has been updated with currently equipped items.")
 		EndIf
 	EndIf
 
