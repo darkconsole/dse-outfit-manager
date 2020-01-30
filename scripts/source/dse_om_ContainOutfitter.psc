@@ -15,8 +15,8 @@ Event OnLoad()
 
 	;; figure out who we wanted to shove this into.
 
-	self.Who = StorageUtil.GetFormValue(None,Main.KeyOutfitTarget) as Actor
-	StorageUtil.UnsetFormValue(None,Main.KeyOutfitTarget)
+	self.Who = Main.StorageFormGet(None,Main.KeyOutfitTarget) as Actor
+	Main.StorageFormClear(None,Main.KeyOutfitTarget)
 
 	;; put the destionations shit in the box.
 
@@ -73,14 +73,14 @@ Event OnActivate(ObjectReference What)
 
 	;; empty the current outfit of its items.
 
-	StorageUtil.FormListClear(Who,OutfitKey)
+	Main.StorageFormListClear(Who,OutfitKey)
 
 	;; push the outfit items into the outfit storage. then transfer the
 	;; one that is in the container to the destination actor.
 
 	While(self.GetNthForm(0) != NONE)
 		Type = self.GetNthForm(0)
-		StorageUtil.FormListAdd(self.Who,OutfitKey,Type,FALSE)
+		Main.StorageFormListAdd(self.Who,OutfitKey,Type,FALSE)
 		self.RemoveItem(Type,1,TRUE,self.Who)
 	EndWhile
 
@@ -114,32 +114,32 @@ Function TakeFromDest()
 	While(Iter <= 61)
 		Worn = self.Who.GetEquippedArmorInSlot(Iter)
 		If(Worn != NONE)
-			StorageUtil.FormListAdd(self.Who,Main.KeyItemListTemp,Worn)
+			Main.StorageFormListAdd(self.Who,Main.KeyItemListTemp,Worn)
 		EndIf
 		Iter += 1
 	EndWhile
 
 	If(Weapon1 != NONE)
-		StorageUtil.FormListAdd(self.Who,Main.KeyItemListTemp,Weapon1)
+		Main.StorageFormListAdd(self.Who,Main.KeyItemListTemp,Weapon1)
 	EndIf
 
 	If(Weapon2 != None)
-		StorageUtil.FormListAdd(self.Who,Main.KeyItemListTemp,Weapon2)
+		Main.StorageFormListAdd(self.Who,Main.KeyItemListTemp,Weapon2)
 	EndIf
 
 	;; now go through everything we noticed and put all those things in the
 	;; box. the follower will likely start requipping random things during
 	;; this. that is fine.
 
-	Iter = StorageUtil.FormListCount(self.Who,Main.KeyItemListTemp)
+	Iter = Main.StorageFormListCount(self.Who,Main.KeyItemListTemp)
 	While(Iter > 0)
 		Iter -= 1
 
-		Worn = StorageUtil.FormListGet(self.Who,Main.KeyItemListTemp,Iter)
+		Worn = Main.StorageFormListGet(self.Who,Main.KeyItemListTemp,Iter)
 		self.Who.RemoveItem(Worn,1,TRUE,self)
 	EndWhile
 
-	StorageUtil.FormListClear(self.Who,Main.KeyItemListTemp)
+	Main.StorageFormListClear(self.Who,Main.KeyItemListTemp)
 	self.Who.UnequipAll()
 
 	Return

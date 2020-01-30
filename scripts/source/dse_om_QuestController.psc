@@ -920,3 +920,53 @@ sort.}
 
 	Return
 EndFunction
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+Function StorageFormListClear(Form Who, String Name)
+
+	StorageUtil.FormListClear(Who,Name)
+	Return
+EndFunction
+
+Function StorageFormListAdd(Form Who, String Name, Form What, Bool AllowDup=TRUE)
+
+	StorageUtil.FormListAdd(Who,Name,What,AllowDup)
+	Return
+EndFunction
+
+Int Function StorageFormListCount(Form Who, String Name)
+
+	Return StorageUtil.FormListCount(Who,Name)
+EndFunction
+
+Form Function StorageFormListGet(Form Who, String Name, Int Which)
+
+	Return StorageUtil.FormListGet(Who,Name,Which)
+EndFunction
+
+Form Function StorageFormGet(Form Who, String Name)
+
+	Return StorageUtil.GetFormValue(Who,Name)
+EndFunction
+
+Function StorageFormClear(Form Who, String Name)
+
+	StorageUtil.UnsetFormValue(Who,Name)
+	Return
+EndFunction
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+Auto State Initial
+
+EndState
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+State StorageJsonUtil
+
+EndState
