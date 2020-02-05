@@ -161,7 +161,7 @@ Function MenuActorOutfitEdit(Actor Who)
 		If(Who != self.PlayerRef.GetActorRef())
 			;; equip the requested edit.
 			self.ActorSetCurrentOutfit(Who,OutfitName)
-			self.ActorRefreshOutfit(Who,FALSE,FALSE)
+			self.ActorRefreshOutfit(Who,FALSE,FALSE,TRUE)
 
 			;; spawn the outfitter box.
 			StorageUtil.SetFormValue(NONE,self.KeyOutfitTarget,Who)
@@ -268,7 +268,7 @@ Function MenuActorOutfitEquip(Actor Who, Bool FreeShit=FALSE)
 	If(OutfitName != "")
 		self.PrintDebug(Who.GetDisplayName() + " equipping outfit: " + OutfitName)
 		self.ActorSetCurrentOutfit(Who,OutfitName)
-		self.ActorRefreshOutfit(Who,FreeShit,FALSE)
+		self.ActorRefreshOutfit(Who,FreeShit,FALSE,TRUE)
 	EndIf
 
 	Return
@@ -459,7 +459,7 @@ Function ActorUnregister(Actor Who)
 	Return
 EndFunction
 
-Function ActorUnequipUnlistedArmour(Actor Who)
+Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 
 	Form Item
 	Int Slot
@@ -486,6 +486,7 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 
 	;;ListedWeapons = StorageUtil.FormListFilterByType(Who,OutfitKey,41)
 	;;If(ListedWeapons != None && ListedWeapons.Length > 0)
+	If(WeapsToo)
 		Weapon1 = Who.GetEquippedWeapon(FALSE)
 		Weapon2 = Who.GetEquippedWeapon(TRUE)
 
@@ -496,12 +497,13 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 		If(Weapon2 != None && !StorageUtil.FormListHas(Who,OutfitKey,Weapon2))
 			Who.UnequipItem(Weapon2,TRUE,TRUE)
 		EndIf
+	EndIf
 	;;EndIf
 
 	Return
 EndFunction
 
-Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
+Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FALSE)
 
 	Int ItemCount
 	Form Item
@@ -516,7 +518,7 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
 		Item = StorageUtil.FormListGet(Who,OutfitKey,ItemCount)
 
 		If(Item != None)
-			If((Item As Armor != None) || (Item As Weapon != None))
+			If((Item As Armor != None) || (Item As Weapon != None && WeapsToo))
 				If(FreeShit || Who.GetItemCount(Item) > 0)
 					If(Item.HasKeywordString("zad_Lockable"))
 						;;(Game.GetFormFromFile(0x00F624,"Devious Devices - Integration.esm") As zadLibs).ManipulateDevice(Who,(Item As Armor),TRUE)
@@ -569,7 +571,7 @@ Function ActorStoreOutfit(Actor Who)
 	Return
 EndFunction
 
-Function ActorRefreshOutfit(Actor Who, Bool FreeShit=FALSE, Bool Hard=FALSE)
+Function ActorRefreshOutfit(Actor Who, Bool FreeShit=FALSE, Bool Hard=FALSE, Bool WeapsToo=FALSE)
 
 	String OutfitKey = self.ActorGetCurrentKey(Who)
 
@@ -579,10 +581,10 @@ Function ActorRefreshOutfit(Actor Who, Bool FreeShit=FALSE, Bool Hard=FALSE)
 
 	If(Hard)
 		Who.UnequipAll()
-		self.ActorEquipListedArmour(Who,FreeShit)
+		self.ActorEquipListedArmour(Who,FreeShit,WeapsToo)
 	Else
 		self.ActorUnequipUnlistedArmour(Who)
-		self.ActorEquipListedArmour(Who,FreeShit)
+		self.ActorEquipListedArmour(Who,FreeShit,WeapsToo)
 	EndIf
 
 	Return
