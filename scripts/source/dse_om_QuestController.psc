@@ -13,10 +13,12 @@ Container Property ContainOutfitter Auto
 Message Property MessageHello Auto
 Message Property MessageOutfitChooseCondition1 Auto
 Message Property MessageOutfitChooseCondition2 Auto
+Message Property MessageOutfitChooseAuto Auto
 
 Keyword Property LocationHome Auto
 Keyword Property LocationCity Auto
 Keyword Property LocationTown Auto
+Keyword Property ArmorTypeShield Auto
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -53,6 +55,9 @@ String Property KeyOutfitWhenCity = "When: In City" AutoReadOnly Hidden
 String Property KeyOutfitWhenWilderness = "When: Adventuring" AutoReadOnly Hidden
 String Property KeyOutfitWhere = "Where: " AutoReadOnly Hidden
 
+Int Property AutoSwitchType = 1 AutoReadOnly Hidden
+Int Property AutoSwitchLocale = 2 AutoReadOnly Hidden
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -62,17 +67,20 @@ Event OnInit()
 EndEvent
 
 Event OnGainLOS(Actor Viewer, ObjectReference Who)
+
 	String Oldfit = self.ActorGetCurrentOutfit(Who As Actor)
-	String Newfit
+	String Newfit = self.ActorTryToSetCurrentOutfitByLocationType(Who As Actor)
+	Bool DoWeaps = FALSE
+
+	;;;;;;;;
+	
+	If(Oldfit != Newfit)
+		DoWeaps = TRUE
+	EndIf
 
 	;;;;;;;;
 
-	Newfit = self.ActorTryToSetCurrentOutfitByLocationType(Who As Actor)
-
-	;;If(Newfit != Oldfit)
-		self.ActorRefreshOutfit(Who As Actor)
-	;;EndIf
-
+	self.ActorRefreshOutfit(Who As Actor, WeapsToo=DoWeaps)
 	Return
 EndEvent
 
@@ -130,7 +138,39 @@ Function Hello(Actor Who)
 	ElseIf(Result == 4)
 		self.MenuActorOutfitDelete(Who)
 	ElseIf(Result == 5)
+		self.MenuActorOutfitAuto(Who)
+	ElseIf(Result == 6)
 		Who.OpenInventory(TRUE)
+	EndIf
+
+	Return
+EndFunction
+
+Function MenuActorOutfitAuto(Actor Who)
+{help the player choose what automatic mode to use.}
+
+	Int Result = self.MessageOutfitChooseAuto.Show()
+	Int Value = 0
+
+	;; this could have been shortened just using the result value
+	;; but this is written future proofed, if any more options are
+	;; added it would not work well that way.
+
+	If(Result == 1)
+		Value = self.AutoSwitchType
+	ElseIf(Result == 2)
+		Value = self.AutoSwitchLocale
+	ElseIf(Result == 3)
+		Value = self.AutoSwitchType + self.AutoSwitchLocale
+	ElseIf(Result == 4)
+		Value = -1
+	EndIf
+
+	If(Value >= 0)
+		self.ActorSetOutfitAuto(Who,Value)
+		self.ActorUpdateSet(Who,TRUE)
+	ElseIf(Value == -1)
+		self.ActorUpdateSet(Who,FALSE)
 	EndIf
 
 	Return
@@ -443,7 +483,7 @@ Function ActorRegister(Actor Who)
 		EndIf
 	EndIf
 
-	StorageUtil.FormListAdd(NONE,self.KeyActorList,Who,FALSE)
+	self.ActorUpdateSet(Who,TRUE)
 	self.ActorStoreOutfit(Who)
 	self.ActorRefreshOutfit(Who)
 
@@ -465,9 +505,20 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 	Int Slot
 	Form Weapon1
 	Form Weapon2
-	;; Form[] ListedWeapons
 	String OutfitKey = self.ActorGetCurrentKey(Who)
 	Bool Block = !(Who == self.PlayerRef.GetActorRef())
+
+	;;;;;;;;
+
+	;; if we are using the home or city outfits we will allow weapons to be swapped
+	;; out as requested. we only really want to stop the swapping of weapons while
+	;; we are adventuring and in combat.
+
+	;;If((OutfitKey == self.KeyOutfitWhenHome) || (OutfitKey == self.KeyOutfitWhenCity))
+	;;	WeapsToo = TRUE
+	;;EndIf
+
+	;;;;;;;;
 
 	Slot = 30
 	While(Slot <= 61)
@@ -475,7 +526,9 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 
 		If(Item != None)
 			If(!StorageUtil.FormListHas(Who,OutfitKey,Item))
-				If(!Item.HasKeywordString("zad_Lockable"))
+				If(Item.HasKeywordString("zad_Lockable"))
+				ElseIf(Item.HasKeyword(ArmorTypeShield) && !WeapsToo)
+				Else
 					Who.UnequipItem(Item,Block,TRUE)
 				EndIf
 			EndIf
@@ -484,8 +537,6 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 		Slot += 1
 	EndWhile
 
-	;;ListedWeapons = StorageUtil.FormListFilterByType(Who,OutfitKey,41)
-	;;If(ListedWeapons != None && ListedWeapons.Length > 0)
 	If(WeapsToo)
 		Weapon1 = Who.GetEquippedWeapon(FALSE)
 		Weapon2 = Who.GetEquippedWeapon(TRUE)
@@ -498,7 +549,6 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 			Who.UnequipItem(Weapon2,TRUE,TRUE)
 		EndIf
 	EndIf
-	;;EndIf
 
 	Return
 EndFunction
@@ -511,7 +561,19 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FA
 	Bool Lock = !(Who == self.PlayerRef.GetActorRef())
 
 	ItemCount = StorageUtil.FormListCount(Who,OutfitKey)
-	self.PrintDebug("ActorRefreshOutfit " + OutfitKey + " " + Who.GetDisplayName() + " " + ItemCount + " Items")	
+	self.PrintDebug("ActorRefreshOutfit " + OutfitKey + " " + Who.GetDisplayName() + " " + ItemCount + " Items")
+
+	;;;;;;;;
+
+	;; if we are using the home or city outfits we will allow weapons to be swapped
+	;; out as requested. we only really want to stop the swapping of weapons while
+	;; we are adventuring and in combat.
+
+	;;If((OutfitKey == self.KeyOutfitWhenHome) || (OutfitKey == self.KeyOutfitWhenCity))
+	;;	WeapsToo = TRUE
+	;;EndIf
+
+	;;;;;;;;
 
 	While(ItemCount > 0)
 		ItemCount -= 1
@@ -521,7 +583,7 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FA
 			If((Item As Armor != None) || (Item As Weapon != None && WeapsToo))
 				If(FreeShit || Who.GetItemCount(Item) > 0)
 					If(Item.HasKeywordString("zad_Lockable"))
-						;;(Game.GetFormFromFile(0x00F624,"Devious Devices - Integration.esm") As zadLibs).ManipulateDevice(Who,(Item As Armor),TRUE)
+					ElseIf(Item.HasKeyword(ArmorTypeShield) && !WeapsToo)
 					Else
 						Who.EquipItem(Item,Lock,TRUE)
 					EndIf
@@ -606,17 +668,28 @@ String Function ActorGetCurrentOutfit(Actor Who)
 	Return StorageUtil.GetStringValue(Who,self.KeyActorOutfit,"Default")
 EndFunction
 
-Bool Function ActorGetOutfitAuto(Actor Who)
+Int Function ActorGetOutfitAuto(Actor Who)
 
-	Return (StorageUtil.GetIntValue(Who,self.KeyOutfitAuto,1) == 1)
+	Return StorageUtil.GetIntValue(Who,self.KeyOutfitAuto,(self.AutoSwitchType + self.AutoSwitchLocale))
 EndFunction
 
-Function ActorSetOutfitAuto(Actor Who, Bool What)
+Function ActorSetOutfitAuto(Actor Who, Int What)
 
-	If(What)
-		StorageUtil.SetIntValue(Who,self.KeyOutfitAuto,1)
+	self.PrintDebug("ActorSetOutfitAuto: " + Who.GetDisplayName() + " " + What)
+
+	StorageUtil.SetIntValue(Who,self.KeyOutfitAuto,What)
+
+	Return
+EndFunction
+
+Function ActorUpdateSet(Actor Who, Bool Update)
+
+	If(Update)
+		StorageUtil.FormListAdd(NONE,self.KeyActorList,Who,FALSE)
+		self.PrintDebug("ActorUpdateSet: " + Who.GetDisplayName() + " is being managed.")
 	Else
-		StorageUtil.SetIntValue(Who,self.KeyOutfitAuto,0)
+		StorageUtil.FormListRemove(NONE,self.KeyActorList,Who,TRUE)
+		self.PrintDebug("ActorUpdateSet: " + Who.GetDisplayName() + " is not managed.")
 	EndIf
 
 	Return
@@ -746,6 +819,27 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 	Bool OutfitCity = FALSE
 	Bool InHome = FALSE
 	Bool InCity = FALSE
+	Int WhoSwitch = 0
+	Bool WhoSwitchType
+	Bool WhoSwitchLocale
+
+	;;;;;;;;
+
+	WhoSwitch = self.ActorGetOutfitAuto(Who)
+	WhoSwitchType = Math.LogicalAnd(WhoSwitch,self.AutoSwitchType)
+	WhoSwitchLocale = Math.LogicalAnd(WhoSwitch,self.AutoSwitchLocale)
+
+	If(WhoSwitchType)
+		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Type ENABLED")
+	Else
+		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Type DISABLED")
+	EndIf
+
+	If(WhoSwitchLocale)
+		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Locale ENABLED")
+	Else
+		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Locale DISABLED")
+	EndIf
 
 	;;;;;;;;
 
@@ -783,75 +877,80 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 	;; try to find an outfit for this specific location, crawling up the location
 	;; tree until we find one that matches.
 
-	While(Here != NONE)
-		KeyWhere = self.KeyOutfitWhere + self.GetLocationName(Here)
-		self.PrintDebug(Who.GetDisplayName() + " checking for: " + KeyWhere)
-		
-		If(self.ActorHasOutfit(Who,KeyWhere))
-			If(StringUtil.Find(KeyWhere,"[City]") >= 0)
-				If(self.IsActorReallyInTheCityTho(Who))
+	If(WhoSwitchLocale)
+		While(Here != NONE)
+			KeyWhere = self.KeyOutfitWhere + self.GetLocationName(Here)
+			self.PrintDebug(Who.GetDisplayName() + " checking for: " + KeyWhere)
+			
+			If(self.ActorHasOutfit(Who,KeyWhere))
+				If(StringUtil.Find(KeyWhere,"[City]") >= 0)
+					If(self.IsActorReallyInTheCityTho(Who))
+						OutfitName = KeyWhere
+					EndIf
+				Else
 					OutfitName = KeyWhere
 				EndIf
-			Else
-				OutfitName = KeyWhere
 			EndIf
-		EndIf
 
-		If(OutfitName != "")
-			self.ActorSetCurrentOutfit(Who,OutfitName)		
-			Return OutfitName
-		Endif
+			If(OutfitName != "")
+				self.ActorSetCurrentOutfit(Who,OutfitName)		
+				Return OutfitName
+			Endif
 
-		Here = PO3_SKSEFunctions.GetParentLocation(Here)
-	EndWhile
+			Here = PO3_SKSEFunctions.GetParentLocation(Here)
+		EndWhile
 
-	self.PrintDebug(Who.GetDisplayName() + " has no location aware outfits")
+		self.PrintDebug(Who.GetDisplayName() + " has no location aware outfits")
+	EndIf
 
 	;;;;;;;;
 
 	;; try to find an outfit that matches the type of place we are in
 	;; crawling up the location tree until we find a match.
 
-	Here = Who.GetCurrentLocation()
+	If(WhoSwitchType)
+		Here = Who.GetCurrentLocation()
 
-	While(Here != NONE)
+		While(Here != NONE)
 
-		If(Here.HasKeyword(LocationHome))
-			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
-				OutfitName = self.KeyOutfitWhenHome
-				self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
-			Else
-				self.PrintDebug(Who.GetDisplayName() + " has no home outfit")
-			EndIf
-		ElseIf(Here.HasKeyword(LocationCity))
-			If(self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
-				If(self.IsActorReallyInTheCityTho(Who))
-					OutfitName = self.KeyOutfitWhenCity
+			If(Here.HasKeyword(LocationHome))
+				If(self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
+					OutfitName = self.KeyOutfitWhenHome
 					self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
 				Else
-					self.PrintDebug(Who.GetDisplayName() + " has no city outfit")
+					self.PrintDebug(Who.GetDisplayName() + " has no home outfit")
+				EndIf
+			ElseIf(Here.HasKeyword(LocationCity))
+				If(self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
+					If(self.IsActorReallyInTheCityTho(Who))
+						OutfitName = self.KeyOutfitWhenCity
+						self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
+					Else
+						self.PrintDebug(Who.GetDisplayName() + " has no city outfit")
+					EndIf
 				EndIf
 			EndIf
+
+			If(OutfitName != "")
+				self.ActorSetCurrentOutfit(Who,OutfitName)		
+				Return OutfitName
+			Endif
+
+			Here = PO3_SKSEFunctions.GetParentLocation(Here)
+		EndWhile
+
+
+		;;;;;;;;
+
+		;; if we failed to find a specific location or type of place outfit
+		;; and we have an adventure outfit, put it on.
+
+		If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+			self.PrintDebug(Who.GetDisplayName() + " found " + self.KeyOutfitWhenWilderness)
+			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
+		Else
+			self.PrintDebug(Who.GetDisplayName() + " has no type of place outfits")
 		EndIf
-
-		If(OutfitName != "")
-			self.ActorSetCurrentOutfit(Who,OutfitName)		
-			Return OutfitName
-		Endif
-
-		Here = PO3_SKSEFunctions.GetParentLocation(Here)
-	EndWhile
-
-	;;;;;;;;
-
-	;; if we failed to find a specific location or type of place outfit
-	;; and we have an adventure outfit, put it on.
-
-	If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
-		self.PrintDebug(Who.GetDisplayName() + " found " + self.KeyOutfitWhenWilderness)
-		self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
-	Else
-		self.PrintDebug(Who.GetDisplayName() + " has no type of place outfits")
 	EndIf
 
 	Return self.ActorGetCurrentOutfit(Who)
@@ -959,16 +1058,3 @@ Function StorageFormClear(Form Who, String Name)
 	Return
 EndFunction
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-Auto State Initial
-
-EndState
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-State StorageJsonUtil
-
-EndState
