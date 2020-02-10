@@ -4,11 +4,33 @@ ScriptName dse_om_QuestController extends Quest
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Bool Property DebugMode = TRUE Auto Hidden
+{should we spam the console with a bazillion debugging messages?}
+
+Bool Property UseLOS = TRUE Auto Hidden
+{if we should use the los or force in parallel.}
+
+Float Property EquipDelay = 0.05 Auto Hidden
+{a delay to let scripts breathe.}
+
 Bool Property CheckRootWorldspaces = TRUE Auto Hidden
+{should we check known root worldspaces to determine if we are "outside"?}
+
+Bool Property WeaponsHome = FALSE Auto Hidden
+{should we allow weapons in our homes?}
+
+Bool Property WeaponsCity = FALSE Auto Hidden
+{should we allow weapons in our cities?}
+
+Bool Property WeaponsEver = FALSE Auto Hidden
+{should we ever attempt to manage weapons?}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ReferenceAlias Property PlayerRef Auto
 Outfit Property OutfitNone Auto
 Container Property ContainOutfitter Auto
+Weapon Property WeapNull Auto
 
 Message Property MessageHello Auto
 Message Property MessageOutfitChooseCondition1 Auto
@@ -57,6 +79,8 @@ String Property KeyOutfitWhere = "Where: " AutoReadOnly Hidden
 
 Int Property AutoSwitchType = 1 AutoReadOnly Hidden
 Int Property AutoSwitchLocale = 2 AutoReadOnly Hidden
+Int Property AutoSwitchWeapons = 4 AutoReadOnly Hidden
+Int Property AutoSwitchShields = 8 AutoReadOnly Hidden
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -107,12 +131,19 @@ Function UpdateLoadedActors()
 		Iter -= 1
 		Who = StorageUtil.FormListGet(NONE,self.KeyActorList,Iter) As Actor
 
-		If(Who != None && Who.Is3dLoaded())
-			;; here we use the LOS pick to avoid setting actors in
-			;; other zones. like when i told my follower to wait outside in
-			;; whiterun she would be flipping outfits still for no reason.
-			self.UnregisterForLOS(Player,Who)
-			self.RegisterForSingleLOSGain(Player,Who)
+		If(Who != None && Who.IsNearPlayer())
+			If(self.UseLOS)
+				;; this will cause the actor to update the next time we can actually
+				;; see them. potentially allowing us to avoid doing it a few times
+				;; and also multi-thread it.
+				self.UnregisterForLOS(Player,Who)
+				self.RegisterForSingleLOSGain(Player,Who)
+			Else
+				;; this will cause all actors in range to get updated right now in
+				;; sequence.
+				self.OnGainLOS(Who,Who)
+			EndIf
+
 		EndIf
 	EndWhile
 
@@ -157,11 +188,11 @@ Function MenuActorOutfitAuto(Actor Who)
 	;; added it would not work well that way.
 
 	If(Result == 1)
-		Value = self.AutoSwitchType
+		Value = AutoSwitchType + AutoSwitchWeapons + AutoSwitchShields
 	ElseIf(Result == 2)
-		Value = self.AutoSwitchLocale
+		Value = AutoSwitchLocale + AutoSwitchWeapons + AutoSwitchShields
 	ElseIf(Result == 3)
-		Value = self.AutoSwitchType + self.AutoSwitchLocale
+		Value = AutoSwitchType + AutoSwitchLocale + AutoSwitchWeapons + AutoSwitchShields
 	ElseIf(Result == 4)
 		Value = -1
 	EndIf
@@ -466,26 +497,29 @@ Function ActorRegister(Actor Who)
 	String OutfitName = self.ActorGetCurrentOutfit(Who)
 
 	;; register the outfit if first time use on actor.
+
 	self.ActorSetCurrentOutfit(Who,OutfitName)
 
-	If(Who != self.PlayerRef.GetActorRef())
-		;; tell them to stop dressing.
-		Who.SetOutfit(self.OutfitNone,FALSE)
-		Who.SetOutfit(self.OutfitNone,TRUE)
-
-		;; open their inventory.
-		;;Who.SetPlayerTeammate(TRUE)
-		;;Who.OpenInventory(TRUE)
-		;;Utility.Wait(0.20)
-
-		If(ShouldCancel)
-		;;	Who.SetPlayerTeammate(FALSE)
-		EndIf
-	EndIf
+	;; track them, store the outfit.
 
 	self.ActorUpdateSet(Who,TRUE)
 	self.ActorStoreOutfit(Who)
-	self.ActorRefreshOutfit(Who)
+
+	;; disable the default outfits and force a full refresh.
+
+	If(Who != self.PlayerRef.GetActorRef())
+		;; one interesting thing is when this was called before
+		;; storing the outfit, it would cause the skin of the
+		;; currently equipped armour to bug out and also some
+		;; of the items would no longer be "equipped" according
+		;; to the game api.
+
+		;; so when we first register an outfit we will do a full
+		;; on full refresh.
+
+	EndIf
+
+	self.ActorRefreshOutfit(Who,FALSE,TRUE,TRUE)
 
 	Return
 EndFunction
@@ -505,50 +539,73 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 	Int Slot
 	Form Weapon1
 	Form Weapon2
+	String OutfitName = self.ActorGetCurrentOutfit(Who)
 	String OutfitKey = self.ActorGetCurrentKey(Who)
 	Bool Block = !(Who == self.PlayerRef.GetActorRef())
+	Bool IsWeapHome = self.IsHomeOutfit(OutfitName) && !self.WeaponsHome
+	Bool IsWeapCity = self.IsCityOutfit(OutfitName) && !self.WeaponsCity
 
 	;;;;;;;;
 
-	;; if we are using the home or city outfits we will allow weapons to be swapped
-	;; out as requested. we only really want to stop the swapping of weapons while
-	;; we are adventuring and in combat.
-
-	;;If((OutfitKey == self.KeyOutfitWhenHome) || (OutfitKey == self.KeyOutfitWhenCity))
-	;;	WeapsToo = TRUE
-	;;EndIf
+	self.PrintDebug("ActorUnquipListedArmour: " + OutfitKey + " " + Who.GetDisplayName() + " WeapsToo=" + (WeapsToo As Int))
 
 	;;;;;;;;
+
+	;; short circuit unequips for home/city weapons.
+	;; intentionally called before doing the armour because giving and taking
+	;; things from npcs triggers them to self re-evaluate their loadouts.
+
+	If(IsWeapHome || IsWeapCity)
+		self.ActorUnequipWeapons(Who)
+		WeapsToo = FALSE
+	EndIf
+
+	;;;;;;;;
+
+	;; unequip the basic armour slots.
 
 	Slot = 30
 	While(Slot <= 61)
 		Item = Who.GetEquippedArmorInSlot(Slot)
 
-		If(Item != None)
-			If(!StorageUtil.FormListHas(Who,OutfitKey,Item))
-				If(Item.HasKeywordString("zad_Lockable"))
-				ElseIf(Item.HasKeyword(ArmorTypeShield) && !WeapsToo)
-				Else
-					Who.UnequipItem(Item,Block,TRUE)
-				EndIf
-			EndIf
+		If(Item == None)
+			;; skip an invalid item.
+		ElseIf(Item.HasKeywordString("zad_Lockable"))
+			;; skip devious device devices.
+		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Item))
+			;; skip if outfit reuses it.
+		Else
+			self.PrintDebug("ActorUnquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
+			Who.UnequipItem(Item,Block,TRUE)
 		EndIf
 
 		Slot += 1
 	EndWhile
 
+	;;;;;;;;
+
+	;/*
 	If(WeapsToo)
 		Weapon1 = Who.GetEquippedWeapon(FALSE)
 		Weapon2 = Who.GetEquippedWeapon(TRUE)
 
-		If(Weapon1 != None && !StorageUtil.FormListHas(Who,OutfitKey,Weapon1))
-			Who.UnequipItem(Weapon1,TRUE,TRUE)
+		If(Weapon1 == None)
+			;; skip invalid items.
+		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Weapon1))
+			;; skip it if this outfit also has it.
+		Else
+			Who.UnequipItemEx(Weapon1,Who.EquipSlot_LeftHand,TRUE)
 		EndIf
 
-		If(Weapon2 != None && !StorageUtil.FormListHas(Who,OutfitKey,Weapon2))
-			Who.UnequipItem(Weapon2,TRUE,TRUE)
+		If(Weapon2 == None)
+			;; skip invalid items.
+		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Weapon2))
+			;; skip it if this outfit also has it.
+		Else
+			Who.UnequipItemEx(Weapon2,Who.EquipSlot_RightHand,TRUE)
 		EndIf
 	EndIf
+	*/;
 
 	Return
 EndFunction
@@ -557,21 +614,17 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FA
 
 	Int ItemCount
 	Form Item
+	String OutfitName = self.ActorGetCurrentOutfit(Who)
 	String OutfitKey = self.ActorGetCurrentKey(Who)
 	Bool Lock = !(Who == self.PlayerRef.GetActorRef())
-
-	ItemCount = StorageUtil.FormListCount(Who,OutfitKey)
-	self.PrintDebug("ActorRefreshOutfit " + OutfitKey + " " + Who.GetDisplayName() + " " + ItemCount + " Items")
+	Bool IsWeapHome = self.IsHomeOutfit(OutfitName) && !self.WeaponsHome
+	Bool IsWeapCity = self.IsCityOutfit(OutfitName) && !self.WeaponsCity
+	Bool IsWeapCombat = Who.IsInCombat()
 
 	;;;;;;;;
 
-	;; if we are using the home or city outfits we will allow weapons to be swapped
-	;; out as requested. we only really want to stop the swapping of weapons while
-	;; we are adventuring and in combat.
-
-	;;If((OutfitKey == self.KeyOutfitWhenHome) || (OutfitKey == self.KeyOutfitWhenCity))
-	;;	WeapsToo = TRUE
-	;;EndIf
+	ItemCount = StorageUtil.FormListCount(Who,OutfitKey)
+	self.PrintDebug("ActorEquipListedArmour: " + OutfitKey + " " + Who.GetDisplayName() + " " + ItemCount + " Items, WeapsToo=" + (WeapsToo As Int))
 
 	;;;;;;;;
 
@@ -579,18 +632,59 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FA
 		ItemCount -= 1
 		Item = StorageUtil.FormListGet(Who,OutfitKey,ItemCount)
 
-		If(Item != None)
-			If((Item As Armor != None) || (Item As Weapon != None && WeapsToo))
-				If(FreeShit || Who.GetItemCount(Item) > 0)
-					If(Item.HasKeywordString("zad_Lockable"))
-					ElseIf(Item.HasKeyword(ArmorTypeShield) && !WeapsToo)
-					Else
-						Who.EquipItem(Item,Lock,TRUE)
-					EndIf
-				EndIf
-			EndIf
+		If(Item == None)
+			;; skip an item that is invalid.
+		ElseIf((Item As Armor == None) && (Item As Weapon == None))
+			;; skip an item that is not an equippable type.
+		ElseIf(Who.GetItemCount(Item) == 0 && !FreeShit)
+			;; skip an item we have none of.
+		ElseIf(Item.HasKeywordString("zad_Lockable"))
+			;; skip a devious devices item.
+		ElseIf(Item.HasKeywordString("ArmorShield") && (IsWeapHome || IsWeapCity || IsWeapCombat))
+			;; skip a shield if we are not doing weapons.
+		ElseIf((Item As Weapon != None) && (IsWeapHome || IsWeapCity || IsWeapCombat))
+			;; skip weapons if we are not doing weapons.
+		Else
+			self.PrintDebug("ActorEquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
+			Who.EquipItem(Item,Lock,TRUE)
+		EndIf
+
+		If(self.EquipDelay != 0.0)
+			Utility.Wait(self.EquipDelay)
 		EndIf
 	EndWhile
+
+	Return
+EndFunction
+
+Function ActorUnequipWeapons(Actor Who)
+{so unequipping weapons in skyrim is stupid. if you unequip an item, it will re-equip
+the last thing you used prior to that, which even if i am playing normally has never
+once been useful.}
+
+	;; iT FuCKiNG mADe Me DO iT
+
+	;; sober explanation: silently equipping an invisible dagger and then silently
+	;; unequipping it to prevent the game from falling back to the previous weapon.
+
+	self.PrintDebug("ActorUnequipWeapons: " + Who.GetDisplayName())
+	self.PrintDebug("ActorUnequipWeapons: " + Who.GetDisplayName() + " Equip Null Weap: " + self.WeapNull.GetName())
+
+	If(Who.GetItemCount(self.WeapNull) < 2)
+		Who.AddItem(self.WeapNull,2,TRUE)
+	EndIf
+
+	Who.EquipItemEx(self.WeapNull,1,TRUE,FALSE)
+	Who.EquipItemEx(self.WeapNull,2,TRUE,FALSE)
+	Who.UnequipItemEx(self.WeapNull,1,TRUE)
+	Who.UnequipItemEx(self.WeapNull,2,TRUE)
+
+	Who.UnequipItemSlot(39) ;; shield
+
+	;; removing the item kicks npcs into re-evaluating their loadouts undoing what we
+	;; just did, so i've made this dagger weightless and non-playable. we'll just leave
+	;; them hidden in the actor's inventory.
+	;;Who.RemoveItem(self.WeapNull,2,TRUE)
 
 	Return
 EndFunction
@@ -609,10 +703,12 @@ Function ActorStoreOutfit(Actor Who)
 
 	Slot = 30
 	While(Slot <= 61)
-		Worn = Who.GetEquippedArmorInSlot(Slot)
+		;;Worn = Who.GetEquippedArmorInSlot(Slot)
+		Worn = Who.GetWornForm(Armor.GetMaskForSlot(Slot))
 
 		If(Worn != NONE)
 			StorageUtil.FormListAdd(Who,OutfitKey,Worn,FALSE)
+			self.PrintDebug("ActorStoreOutfit: " + Who.GetDisplayName() + " " + Worn.GetName())
 		EndIf
 
 		Slot += 1
@@ -643,6 +739,8 @@ Function ActorRefreshOutfit(Actor Who, Bool FreeShit=FALSE, Bool Hard=FALSE, Boo
 
 	If(Hard)
 		Who.UnequipAll()
+		;;Who.SetOutfit(self.OutfitNone,FALSE)
+		;;Who.SetOutfit(self.OutfitNone,TRUE) ;; SetOutfit in SSE seems to not be good.
 		self.ActorEquipListedArmour(Who,FreeShit,WeapsToo)
 	Else
 		self.ActorUnequipUnlistedArmour(Who)
@@ -670,7 +768,9 @@ EndFunction
 
 Int Function ActorGetOutfitAuto(Actor Who)
 
-	Return StorageUtil.GetIntValue(Who,self.KeyOutfitAuto,(self.AutoSwitchType + self.AutoSwitchLocale))
+	Int Default = AutoSwitchType + AutoSwitchLocale + AutoSwitchWeapons + AutoSwitchShields
+
+	Return StorageUtil.GetIntValue(Who,self.KeyOutfitAuto,Default)
 EndFunction
 
 Function ActorSetOutfitAuto(Actor Who, Int What)
@@ -970,6 +1070,18 @@ the literal downtown.}
 		EndIf
 
 	Return LocationName
+EndFunction
+
+Bool Function IsHomeOutfit(String OutfitName)
+{is this the home outfit?}
+
+	Return OutfitName == self.KeyOutfitWhenHome
+EndFunction
+
+Bool Function IsCityOutfit(String OutfitName)
+{is this the city outfit?}
+
+	Return OutfitName == self.KeyOutfitWhenCity
 EndFunction
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
