@@ -6,20 +6,20 @@ ScriptName dse_om_QuestController extends Quest
 Bool Property DebugMode = TRUE Auto Hidden
 {should we spam the console with a bazillion debugging messages?}
 
+Bool Property CheckRootWorldspaces = TRUE Auto Hidden
+{should we check known root worldspaces to determine if we are "outside"?}
+
 Bool Property UseLOS = TRUE Auto Hidden
 {if we should use the los or force in parallel.}
 
 Bool Property DisableAutoWhenTold = TRUE Auto Hidden
 {should we stop auto switching when manually told to wear an outfit.}
 
-Bool Property WeaponsOut = FALSE Auto Hidden
-{should we swap weapons out if we have them out?}
-
 Float Property EquipDelay = 0.05 Auto Hidden
 {a delay to let scripts breathe.}
 
-Bool Property CheckRootWorldspaces = TRUE Auto Hidden
-{should we check known root worldspaces to determine if we are "outside"?}
+Bool Property WeaponsOut = FALSE Auto Hidden
+{should we swap weapons out if we have them out?}
 
 Bool Property WeaponsHome = FALSE Auto Hidden
 {should we allow weapons in our homes?}
@@ -101,19 +101,10 @@ EndEvent
 
 Event OnGainLOS(Actor Viewer, ObjectReference Who)
 
-	String Oldfit = self.ActorGetCurrentOutfit(Who As Actor)
+	;;String Oldfit = self.ActorGetCurrentOutfit(Who As Actor)
 	String Newfit = self.ActorTryToSetCurrentOutfitByLocationType(Who As Actor)
-	Bool DoWeaps = FALSE
 
-	;;;;;;;;
-	
-	If(Oldfit != Newfit)
-		DoWeaps = TRUE
-	EndIf
-
-	;;;;;;;;
-
-	self.ActorRefreshOutfit(Who As Actor, WeapsToo=DoWeaps)
+	self.ActorRefreshOutfit(Who As Actor)
 	Return
 EndEvent
 
@@ -241,7 +232,7 @@ Function MenuActorOutfitEdit(Actor Who)
 		If(Who != self.PlayerRef.GetActorRef())
 			;; equip the requested edit.
 			self.ActorSetCurrentOutfit(Who,OutfitName)
-			self.ActorRefreshOutfit(Who,FALSE,FALSE,TRUE)
+			self.ActorRefreshOutfit(Who,FALSE,FALSE)
 
 			;; spawn the outfitter box.
 			StorageUtil.SetFormValue(NONE,self.KeyOutfitTarget,Who)
@@ -353,7 +344,7 @@ Function MenuActorOutfitEquip(Actor Who, Bool FreeShit=FALSE)
 			self.ActorSetOutfitAuto(Who,self.AutoSwitchNone)
 		EndIf
 
-		self.ActorRefreshOutfit(Who,FreeShit,FALSE,TRUE)
+		self.ActorRefreshOutfit(Who,FreeShit,FALSE)
 	EndIf
 
 	Return
@@ -533,7 +524,7 @@ Function ActorRegister(Actor Who)
 
 	EndIf
 
-	self.ActorRefreshOutfit(Who,FALSE,FALSE,TRUE)
+	self.ActorRefreshOutfit(Who,FALSE,FALSE)
 
 	Return
 EndFunction
@@ -547,7 +538,7 @@ Function ActorUnregister(Actor Who)
 	Return
 EndFunction
 
-Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
+Function ActorUnequipUnlistedArmour(Actor Who)
 
 	Form Item
 	Int Slot
@@ -562,7 +553,7 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 
 	;;;;;;;;
 
-	self.PrintDebug("ActorUnquipListedArmour: " + OutfitKey + " " + Who.GetDisplayName() + " WeapsToo=" + (WeapsToo As Int))
+	self.PrintDebug("ActorUnquipListedArmour: " + OutfitKey + " " + Who.GetDisplayName())
 
 	;;;;;;;;
 
@@ -573,7 +564,6 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 	If(IsWeapHome || IsWeapCity)
 		If(!Who.IsWeaponDrawn() || self.WeaponsOut)
 			self.ActorUnequipWeapons(Who)
-			WeapsToo = FALSE		
 		EndIf
 	EndIf
 
@@ -601,35 +591,10 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 		Slot += 1
 	EndWhile
 
-	;;;;;;;;
-
-	;/*
-	If(WeapsToo)
-		Weapon1 = Who.GetEquippedWeapon(FALSE)
-		Weapon2 = Who.GetEquippedWeapon(TRUE)
-
-		If(Weapon1 == None)
-			;; skip invalid items.
-		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Weapon1))
-			;; skip it if this outfit also has it.
-		Else
-			Who.UnequipItemEx(Weapon1,Who.EquipSlot_LeftHand,TRUE)
-		EndIf
-
-		If(Weapon2 == None)
-			;; skip invalid items.
-		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Weapon2))
-			;; skip it if this outfit also has it.
-		Else
-			Who.UnequipItemEx(Weapon2,Who.EquipSlot_RightHand,TRUE)
-		EndIf
-	EndIf
-	*/;
-
 	Return
 EndFunction
 
-Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FALSE)
+Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
 
 	Int ItemCount
 	Form Item
@@ -643,7 +608,7 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FA
 	;;;;;;;;
 
 	ItemCount = StorageUtil.FormListCount(Who,OutfitKey)
-	self.PrintDebug("ActorEquipListedArmour: " + OutfitKey + " " + Who.GetDisplayName() + " " + ItemCount + " Items, WeapsToo=" + (WeapsToo As Int))
+	self.PrintDebug("ActorEquipListedArmour: " + OutfitKey + " " + Who.GetDisplayName() + " " + ItemCount + " Items")
 
 	;;;;;;;;
 
@@ -749,7 +714,7 @@ Function ActorStoreOutfit(Actor Who)
 	Return
 EndFunction
 
-Function ActorRefreshOutfit(Actor Who, Bool FreeShit=FALSE, Bool Hard=FALSE, Bool WeapsToo=FALSE)
+Function ActorRefreshOutfit(Actor Who, Bool FreeShit=FALSE, Bool Hard=FALSE)
 
 	String OutfitKey = self.ActorGetCurrentKey(Who)
 
@@ -761,10 +726,10 @@ Function ActorRefreshOutfit(Actor Who, Bool FreeShit=FALSE, Bool Hard=FALSE, Boo
 		Who.UnequipAll()
 		;;Who.SetOutfit(self.OutfitNone,FALSE)
 		;;Who.SetOutfit(self.OutfitNone,TRUE) ;; SetOutfit in SSE seems to not be good.
-		self.ActorEquipListedArmour(Who,FreeShit,WeapsToo)
+		self.ActorEquipListedArmour(Who,FreeShit)
 	Else
 		self.ActorUnequipUnlistedArmour(Who)
-		self.ActorEquipListedArmour(Who,FreeShit,WeapsToo)
+		self.ActorEquipListedArmour(Who,FreeShit)
 	EndIf
 
 	Return
@@ -924,13 +889,13 @@ Bool Function IsActorReallyInTheCityTho(Actor Who)
 
 	While(Iter < self.RootWorldSpaces.Length)
 		If(World == self.RootWorldSpaces[Iter])
-			self.PrintDebug(Who.GetDisplayName() + " is in open world")
+			;;self.PrintDebug(Who.GetDisplayName() + " is in open world")
 			Return FALSE
 		EndIf
 		Iter += 1
 	EndWhile
 
-	self.PrintDebug(Who.GetDisplayName() + " is not in open world")
+	;;self.PrintDebug(Who.GetDisplayName() + " is not in open world")
 	Return TRUE
 EndFunction
 
