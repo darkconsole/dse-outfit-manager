@@ -74,12 +74,15 @@ String Property KeyItemListTemp = "DSEOM.ActorItemListTemp" AutoReadOnly Hidden
 String Property KeyOutfitAuto = "DSEOM.ActorOutfitAuto" AutoReadOnly Hidden
 String Property KeyActorLocation = "DSEOM.ActorLocationLast" AutoReadOnly Hidden
 String Property KeyActorWorldSpace = "DSEOM.ActorWorldSpaceLast" AutoReadOnly Hidden
+String Property KeyActorLocationHome = "DSEOM.ActorLocationHome" AutoReadOnly Hidden
+String Property KeyActorLocationCity = "DSEOM.ActorLocationCity" AutoReadOnly Hidden
 
 String Property KeyOutfitWhenHome = "When: At Home" AutoReadOnly Hidden
 String Property KeyOutfitWhenCity = "When: In City" AutoReadOnly Hidden
 String Property KeyOutfitWhenWilderness = "When: Adventuring" AutoReadOnly Hidden
 String Property KeyOutfitWhere = "Where: " AutoReadOnly Hidden
 
+Int Property AutoSwitchNone = 0 AutoReadOnly Hidden
 Int Property AutoSwitchType = 1 AutoReadOnly Hidden
 Int Property AutoSwitchLocale = 2 AutoReadOnly Hidden
 Int Property AutoSwitchWeapons = 4 AutoReadOnly Hidden
@@ -545,8 +548,8 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 	String OutfitName = self.ActorGetCurrentOutfit(Who)
 	String OutfitKey = self.ActorGetCurrentKey(Who)
 	Bool Block = !(Who == self.PlayerRef.GetActorRef())
-	Bool IsWeapHome = self.IsHomeOutfit(OutfitName) && !self.WeaponsHome
-	Bool IsWeapCity = self.IsCityOutfit(OutfitName) && !self.WeaponsCity
+	Bool IsWeapHome = self.ActorGetInHome(Who) && !self.WeaponsHome
+	Bool IsWeapCity = self.ActorGetInCity(Who) && !self.WeaponsCity
 	Bool IsWeapCombat = Who.IsInCombat()
 
 	;;;;;;;;
@@ -560,8 +563,10 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 	;; things from npcs triggers them to self re-evaluate their loadouts.
 
 	If(IsWeapHome || IsWeapCity)
-		self.ActorUnequipWeapons(Who)
-		WeapsToo = FALSE
+		If(!Who.IsWeaponDrawn() || self.WeaponsOut)
+			self.ActorUnequipWeapons(Who)
+			WeapsToo = FALSE		
+		EndIf
 	EndIf
 
 	;;;;;;;;
@@ -640,6 +645,8 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE, Bool WeapsToo=FA
 
 		If(Item == None)
 			;; skip an item that is invalid.
+		ElseIf(Who.IsEquipped(Item))
+			;; skip things you are already wearing ya tard.
 		ElseIf((Item As Armor == None) && (Item As Weapon == None))
 			;; skip an item that is not an equippable type.
 		ElseIf(Who.GetItemCount(Item) == 0 && !FreeShit)
@@ -673,11 +680,6 @@ once been useful.}
 	;; sober explanation: silently equipping an invisible dagger and then silently
 	;; unequipping it to prevent the game from falling back to the previous weapon.
 
-	If(!self.WeaponsOut && Who.IsWeaponDrawn())
-		Return
-	EndIf
-
-	self.PrintDebug("ActorUnequipWeapons: " + Who.GetDisplayName())
 	self.PrintDebug("ActorUnequipWeapons: " + Who.GetDisplayName() + " Equip Null Weap: " + self.WeapNull.GetName())
 
 	If(Who.GetItemCount(self.WeapNull) < 2)
@@ -872,6 +874,28 @@ Function ActorDeleteOutfit(Actor Who, String OutfitName)
 	Return
 EndFunction
 
+Function ActorSetInHome(Actor Who, Bool Yep)
+
+	StorageUtil.SetIntValue(Who,self.KeyActorLocationHome,(Yep As Int))
+	Return
+EndFunction
+
+Bool Function ActorGetInHome(Actor Who)
+
+	Return StorageUtil.GetIntValue(Who,self.KeyActorLocationHome,0) As Bool
+EndFunction
+
+Function ActorSetInCity(Actor Who, Bool Yep)
+
+	StorageUtil.SetIntValue(Who,self.KeyActorLocationCity,(Yep As Int))
+	Return
+EndFunction
+
+Bool Function ActorGetInCity(Actor Who)
+
+	Return StorageUtil.GetIntValue(Who,self.KeyActorLocationCity,0) As Bool
+EndFunction
+
 Bool Function IsActorReallyInTheCityTho(Actor Who)
 {are we really really tho?}
 
@@ -920,15 +944,15 @@ EndFunction
 String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	Location Here = NONE
-	Location Prev = NONE
-	WorldSpace PrevWorld = NONE
-	WorldSpace HereWorld = NONE
+	;;Location Prev = NONE
+	;;WorldSpace PrevWorld = NONE
+	;;WorldSpace HereWorld = NONE
 	String KeyWhere = ""
 	String OutfitName = ""
-	Bool OutfitHome = FALSE
-	Bool OutfitCity = FALSE
-	Bool InHome = FALSE
-	Bool InCity = FALSE
+	;;Bool OutfitHome = FALSE
+	;;Bool OutfitCity = FALSE
+	Bool IsInHome = FALSE
+	Bool IsInCity = FALSE
 	Int WhoSwitch = 0
 	Bool WhoSwitchType
 	Bool WhoSwitchLocale
@@ -939,19 +963,11 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 	WhoSwitchType = Math.LogicalAnd(WhoSwitch,self.AutoSwitchType)
 	WhoSwitchLocale = Math.LogicalAnd(WhoSwitch,self.AutoSwitchLocale)
 
-	If(WhoSwitchType)
-		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Type ENABLED")
-	Else
-		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Type DISABLED")
-	EndIf
-
-	If(WhoSwitchLocale)
-		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Locale ENABLED")
-	Else
-		self.PrintDebug(Who.GetDisplayName() + " Auto Switch Locale DISABLED")
-	EndIf
-
 	;;;;;;;;
+
+	;/*
+	;; todo - instead of this, disable the actor's auto setting when telling them
+	;; to use a specific outfit.
 
 	Here = Who.GetCurrentLocation()
 	Prev = StorageUtil.GetFormValue(Who,self.KeyActorLocation) As Location
@@ -964,6 +980,7 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 		;; time we load a save.
 		Return self.ActorGetCurrentOutfit(Who)
 	EndIf
+	*/;
 
 	;;;;;;;;
 
@@ -984,10 +1001,31 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 
 	;;;;;;;;
 
+	;; run the tests to find out if we are in a house or city now.
+
+	Here = Who.GetCurrentLocation()
+	While(Here != NONE)
+
+		If(Here.HasKeyword(LocationHome))
+			IsInHome = TRUE
+		ElseIf(Here.HasKeyword(LocationCity) && self.IsActorReallyInTheCityTho(Who))
+			IsInCity = TRUE
+		EndIf
+
+		Here = PO3_SKSEFunctions.GetParentLocation(Here)
+	EndWhile
+
+	self.ActorSetInHome(Who,IsInHome)
+	self.ActorSetInCity(Who,IsInCity)
+
+	;;;;;;;;
+
 	;; try to find an outfit for this specific location, crawling up the location
 	;; tree until we find one that matches.
 
 	If(WhoSwitchLocale)
+	
+		Here = Who.GetCurrentLocation()
 		While(Here != NONE)
 			KeyWhere = self.KeyOutfitWhere + self.GetLocationName(Here)
 			self.PrintDebug(Who.GetDisplayName() + " checking for: " + KeyWhere)
@@ -1019,47 +1057,19 @@ String Function ActorTryToSetCurrentOutfitByLocationType(Actor Who)
 	;; crawling up the location tree until we find a match.
 
 	If(WhoSwitchType)
-		Here = Who.GetCurrentLocation()
 
-		While(Here != NONE)
+		If(IsInHome && self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
+			OutfitName = self.KeyOutfitWhenHome
+		ElseIf(IsInCity && self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
+			OutfitName = self.KeyOutfitWhenCity
+		ElseIf(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
+			OutfitName = self.KeyOutfitWhenWilderness
+		EndIf
 
-			If(Here.HasKeyword(LocationHome))
-				If(self.ActorHasOutfit(Who,self.KeyOutfitWhenHome))
-					OutfitName = self.KeyOutfitWhenHome
-					self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
-				Else
-					self.PrintDebug(Who.GetDisplayName() + " has no home outfit")
-				EndIf
-			ElseIf(Here.HasKeyword(LocationCity))
-				If(self.ActorHasOutfit(Who,self.KeyOutfitWhenCity))
-					If(self.IsActorReallyInTheCityTho(Who))
-						OutfitName = self.KeyOutfitWhenCity
-						self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
-					Else
-						self.PrintDebug(Who.GetDisplayName() + " has no city outfit")
-					EndIf
-				EndIf
-			EndIf
-
-			If(OutfitName != "")
-				self.ActorSetCurrentOutfit(Who,OutfitName)		
-				Return OutfitName
-			Endif
-
-			Here = PO3_SKSEFunctions.GetParentLocation(Here)
-		EndWhile
-
-
-		;;;;;;;;
-
-		;; if we failed to find a specific location or type of place outfit
-		;; and we have an adventure outfit, put it on.
-
-		If(self.ActorHasOutfit(Who,self.KeyOutfitWhenWilderness))
-			self.PrintDebug(Who.GetDisplayName() + " found " + self.KeyOutfitWhenWilderness)
-			self.ActorSetCurrentOutfit(Who,self.KeyOutfitWhenWilderness)
-		Else
-			self.PrintDebug(Who.GetDisplayName() + " has no type of place outfits")
+		If(OutfitName != "")
+			self.PrintDebug(Who.GetDisplayName() + " found " + OutfitName)
+			self.ActorSetCurrentOutfit(Who,OutfitName)		
+			Return OutfitName
 		EndIf
 	EndIf
 
