@@ -9,6 +9,9 @@ Bool Property DebugMode = TRUE Auto Hidden
 Bool Property UseLOS = TRUE Auto Hidden
 {if we should use the los or force in parallel.}
 
+Bool Property DisableAutoWhenTold = TRUE Auto Hidden
+{should we stop auto switching when manually told to wear an outfit.}
+
 Bool Property WeaponsOut = FALSE Auto Hidden
 {should we swap weapons out if we have them out?}
 
@@ -345,6 +348,11 @@ Function MenuActorOutfitEquip(Actor Who, Bool FreeShit=FALSE)
 	If(OutfitName != "")
 		self.PrintDebug(Who.GetDisplayName() + " equipping outfit: " + OutfitName)
 		self.ActorSetCurrentOutfit(Who,OutfitName)
+
+		If(self.DisableAutoWhenTold)
+			self.ActorSetOutfitAuto(Who,self.AutoSwitchNone)
+		EndIf
+
 		self.ActorRefreshOutfit(Who,FreeShit,FALSE,TRUE)
 	EndIf
 
