@@ -9,6 +9,9 @@ Bool Property DebugMode = TRUE Auto Hidden
 Bool Property UseLOS = TRUE Auto Hidden
 {if we should use the los or force in parallel.}
 
+Bool Property WeaponsOut = FALSE Auto Hidden
+{should we swap weapons out if we have them out?}
+
 Float Property EquipDelay = 0.05 Auto Hidden
 {a delay to let scripts breathe.}
 
@@ -519,7 +522,7 @@ Function ActorRegister(Actor Who)
 
 	EndIf
 
-	self.ActorRefreshOutfit(Who,FALSE,TRUE,TRUE)
+	self.ActorRefreshOutfit(Who,FALSE,FALSE,TRUE)
 
 	Return
 EndFunction
@@ -544,6 +547,7 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 	Bool Block = !(Who == self.PlayerRef.GetActorRef())
 	Bool IsWeapHome = self.IsHomeOutfit(OutfitName) && !self.WeaponsHome
 	Bool IsWeapCity = self.IsCityOutfit(OutfitName) && !self.WeaponsCity
+	Bool IsWeapCombat = Who.IsInCombat()
 
 	;;;;;;;;
 
@@ -574,6 +578,8 @@ Function ActorUnequipUnlistedArmour(Actor Who, Bool WeapsToo=FALSE)
 			;; skip devious device devices.
 		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Item))
 			;; skip if outfit reuses it.
+		ElseIf(Item.HasKeywordString("ArmorShield") && ((!IsWeapHome && !IsWeapCity) || IsWeapCombat))
+			;; skip shields if we are not doing them.
 		Else
 			self.PrintDebug("ActorUnquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
 			Who.UnequipItem(Item,Block,TRUE)
@@ -666,6 +672,10 @@ once been useful.}
 
 	;; sober explanation: silently equipping an invisible dagger and then silently
 	;; unequipping it to prevent the game from falling back to the previous weapon.
+
+	If(!self.WeaponsOut && Who.IsWeaponDrawn())
+		Return
+	EndIf
 
 	self.PrintDebug("ActorUnequipWeapons: " + Who.GetDisplayName())
 	self.PrintDebug("ActorUnequipWeapons: " + Who.GetDisplayName() + " Equip Null Weap: " + self.WeapNull.GetName())
