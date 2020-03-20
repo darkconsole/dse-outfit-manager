@@ -200,6 +200,8 @@ Function MenuActorOutfitAuto(Actor Who)
 	If(Value >= 0)
 		self.ActorSetOutfitAuto(Who,Value)
 		self.ActorUpdateSet(Who,TRUE)
+		self.ActorTryToSetCurrentOutfitByLocationType(Who)
+		self.ActorRefreshOutfit(Who)
 	ElseIf(Value == -1)
 		self.ActorUpdateSet(Who,FALSE)
 	EndIf
