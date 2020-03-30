@@ -563,7 +563,7 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 	;; intentionally called before doing the armour because giving and taking
 	;; things from npcs triggers them to self re-evaluate their loadouts.
 
-	If(IsWeapHome || IsWeapCity)
+	If(self.WeaponsEver && (IsWeapHome || IsWeapCity))
 		If(!Who.IsWeaponDrawn() || self.WeaponsOut)
 			self.ActorUnequipWeapons(Who)
 		EndIf
@@ -628,9 +628,9 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
 			;; skip an item we have none of.
 		ElseIf(Item.HasKeywordString("zad_Lockable"))
 			;; skip a devious devices item.
-		ElseIf(Item.HasKeywordString("ArmorShield") && (IsWeapHome || IsWeapCity || IsWeapCombat))
+		ElseIf(Item.HasKeywordString("ArmorShield") && (!self.WeaponsEver || IsWeapHome || IsWeapCity || IsWeapCombat))
 			;; skip a shield if we are not doing weapons.
-		ElseIf((Item As Weapon != None) && (IsWeapHome || IsWeapCity || IsWeapCombat))
+		ElseIf((Item As Weapon != None) && (!self.WeaponsEver || IsWeapHome || IsWeapCity || IsWeapCombat))
 			;; skip weapons if we are not doing weapons.
 		Else
 			self.PrintDebug("ActorEquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
