@@ -552,6 +552,7 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 	Bool IsWeapHome = self.ActorGetInHome(Who) && !self.WeaponsHome
 	Bool IsWeapCity = self.ActorGetInCity(Who) && !self.WeaponsCity
 	Bool IsWeapCombat = Who.IsInCombat()
+	Bool IsWeapStowed = !Who.IsWeaponDrawn() || self.WeaponsOut
 
 	;;;;;;;;
 
@@ -563,8 +564,8 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 	;; intentionally called before doing the armour because giving and taking
 	;; things from npcs triggers them to self re-evaluate their loadouts.
 
-	If(self.WeaponsEver && (IsWeapHome || IsWeapCity))
-		If(!Who.IsWeaponDrawn() || self.WeaponsOut)
+	If(IsWeapHome || IsWeapCity)
+		If(IsWeapStowed)
 			self.ActorUnequipWeapons(Who)
 		EndIf
 	EndIf
