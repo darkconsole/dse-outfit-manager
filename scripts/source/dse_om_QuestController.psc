@@ -607,17 +607,19 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
 	Bool IsWeapHome = self.IsHomeOutfit(OutfitName) && !self.WeaponsHome
 	Bool IsWeapCity = self.IsCityOutfit(OutfitName) && !self.WeaponsCity
 	Bool IsWeapCombat = Who.IsInCombat()
+	Form[] ItemList = StorageUtil.FormListToArray(Who,OutfitKey)
 
 	;;;;;;;;
 
-	ItemCount = StorageUtil.FormListCount(Who,OutfitKey)
+	ItemCount = ItemList.Length
 	self.PrintDebug("ActorEquipListedArmour: " + OutfitKey + " " + Who.GetDisplayName() + " " + ItemCount + " Items")
 
 	;;;;;;;;
 
 	While(ItemCount > 0)
 		ItemCount -= 1
-		Item = StorageUtil.FormListGet(Who,OutfitKey,ItemCount)
+		;;Item = StorageUtil.FormListGet(Who,OutfitKey,ItemCount)
+		Item = ItemList[ItemCount]
 
 		If(Item == None)
 			;; skip an item that is invalid.
