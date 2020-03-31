@@ -582,10 +582,10 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 			;; skip an invalid item.
 		ElseIf(Item.HasKeywordString("zad_Lockable"))
 			;; skip devious device devices.
-		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Item))
-			;; skip if outfit reuses it.
 		ElseIf(Item.HasKeywordString("ArmorShield") && ((!IsWeapHome && !IsWeapCity) || IsWeapCombat))
 			;; skip shields if we are not doing them.
+		ElseIf(StorageUtil.FormListHas(Who,OutfitKey,Item))
+			;; skip if outfit reuses it.
 		Else
 			self.PrintDebug("ActorUnquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
 			Who.UnequipItem(Item,Block,TRUE)
