@@ -637,7 +637,7 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
 			;; skip weapons if we are not doing weapons.
 		Else
 			self.PrintDebug("ActorEquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
-			Who.EquipItem(Item,Lock,TRUE)
+			Who.EquipItemEx(Item,0,Lock,FALSE)
 		EndIf
 
 		If(self.EquipDelay != 0.0)
