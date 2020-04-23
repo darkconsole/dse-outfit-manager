@@ -588,7 +588,7 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 			;; skip if outfit reuses it.
 		Else
 			self.PrintDebug("ActorUnquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
-			Who.UnequipItem(Item,Block,TRUE)
+			Who.UnequipItemEx(Item,0,Block)
 		EndIf
 
 		Slot += 1
