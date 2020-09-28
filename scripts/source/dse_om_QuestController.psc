@@ -30,6 +30,9 @@ Bool Property WeaponsCity = FALSE Auto Hidden
 Bool Property WeaponsEver = FALSE Auto Hidden
 {should we ever attempt to manage weapons?}
 
+Bool Property IncludeSlot61 = FALSE Auto Hidden
+{should we include the slot used for special effects?}
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -289,9 +292,13 @@ Function MenuActorOutfitCreateGeneral(Actor Who)
 	Utility.Wait(0.10)
 	OutfitName = self.MenuTextInput()
 
-	self.ActorSetCurrentOutfit(Who,OutfitName)
-	self.ActorRegister(Who)
-	Debug.MessageBox("Outfit \"" + self.ActorGetCurrentOutfit(Who) + "\" has been created from currently equipped items.")
+	If(StringUtil.GetLength(OutfitName) > 0)
+		self.ActorSetCurrentOutfit(Who,OutfitName)
+		self.ActorRegister(Who)
+		Debug.MessageBox("Outfit \"" + self.ActorGetCurrentOutfit(Who) + "\" has been created from currently equipped items.")
+	Else
+		self.Print("Name Empty - Outfit Creation Cancelled")
+	EndIf
 
 	Return
 EndFunction
@@ -387,7 +394,7 @@ String Function MenuActorOutfitList(Actor Who)
 
 	;;;;;;;;
 
-	Result = self.MenuFromList(OutfitList)
+	Result = self.MenuFromList(OutfitList,TRUE)
 
 	If(Result < 0)
 		Return ""
@@ -553,6 +560,7 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 	Bool IsWeapCity = self.ActorGetInCity(Who) && !self.WeaponsCity
 	Bool IsWeapCombat = Who.IsInCombat()
 	Bool IsWeapStowed = !Who.IsWeaponDrawn() || self.WeaponsOut
+	Int SlotMax = 60
 
 	;;;;;;;;
 
@@ -563,6 +571,10 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 	;; short circuit unequips for home/city weapons.
 	;; intentionally called before doing the armour because giving and taking
 	;; things from npcs triggers them to self re-evaluate their loadouts.
+
+	If(self.IncludeSlot61)
+		SlotMax = 61
+	EndIf
 
 	If(IsWeapHome || IsWeapCity)
 		If(IsWeapStowed)
@@ -575,7 +587,7 @@ Function ActorUnequipUnlistedArmour(Actor Who)
 	;; unequip the basic armour slots.
 
 	Slot = 30
-	While(Slot <= 61)
+	While(Slot <= SlotMax)
 		Item = Who.GetEquippedArmorInSlot(Slot)
 
 		If(Item == None)
@@ -686,13 +698,18 @@ Function ActorStoreOutfit(Actor Who)
 	Form Weapon1
 	Form Weapon2
 	String OutfitKey = self.ActorGetCurrentKey(Who)
+	Int SlotMax = 60
+
+	If(self.IncludeSlot61)
+		SlotMax = 61
+	EndIf
 
 	;;;;;;;;
 
 	StorageUtil.FormListClear(Who,OutfitKey)
 
 	Slot = 30
-	While(Slot <= 61)
+	While(Slot <= SlotMax)
 		;;Worn = Who.GetEquippedArmorInSlot(Slot)
 		Worn = Who.GetWornForm(Armor.GetMaskForSlot(Slot))
 
