@@ -372,7 +372,9 @@ Actor Function MenuRegisteredActorList()
 		Iter += 1
 	EndWhile
 
-	Result = self.MenuFromList(NameList)
+	self.SortItemsByStringList(ActorList,NameList)
+
+	Result = self.MenuFromList(NameList,TRUE)
 
 	If(Result == -1)
 		Return NONE
@@ -394,6 +396,7 @@ String Function MenuActorOutfitList(Actor Who)
 
 	;;;;;;;;
 
+	self.SortStringList(OutfitList)
 	Result = self.MenuFromList(OutfitList,TRUE)
 
 	If(Result < 0)
@@ -450,6 +453,7 @@ String Function MenuLocationTree(Actor Who)
 
 	;;;;;;;;
 
+	self.SortStringList(LocationList)
 	Result = self.MenuFromList(LocationList)
 
 	If(Result <= 0)
@@ -467,7 +471,7 @@ Int Function MenuFromList(String[] Items, Bool AllowEmpty=FALSE)
 	Int Iter = 0
 	Int Result
 
-	self.SortStringList(Items)
+	;; self.SortStringList(Items)
 
 	;;;;;;;;
 
@@ -648,6 +652,9 @@ Function ActorEquipListedArmour(Actor Who, Bool FreeShit=FALSE)
 		ElseIf((Item As Weapon != None) && (!self.WeaponsEver || IsWeapHome || IsWeapCity || IsWeapCombat))
 			;; skip weapons if we are not doing weapons.
 		Else
+			If(FreeShit && Who.GetItemCount(Item) == 0)
+				Who.AddItem(Item,1)
+			EndIf
 			self.PrintDebug("ActorEquipListedArmour: " + Who.GetDisplayName() + ", " + Item.GetName())
 			Who.EquipItemEx(Item,0,Lock,FALSE)
 		EndIf
@@ -1138,6 +1145,39 @@ sort.}
 			If(ItemName[Iter] > ItemName[(Iter+1)])
 				TmpName = ItemName[Iter]
 				ItemName[Iter] = ItemName[(Iter+1)]
+				ItemName[(Iter+1)] = TmpName
+				Changed = TRUE
+			EndIf
+
+			Iter += 1
+		EndWhile
+	EndWhile
+
+	Return
+EndFunction
+
+Function SortItemsByStringList(Form[] ItemList, String[] ItemName)
+{setting UIListMenu sort property to TRUE not only does not sort items but it
+also makes the items unselectable. so now i've had to implement my own bubble
+sort that will keep these two lists in sync lol.}
+
+	Form TmpForm
+	String TmpName
+	Int Iter
+	Bool Changed = TRUE
+
+	While(Changed)
+		Iter = 0
+		Changed = FALSE
+
+		While(Iter < (ItemList.Length - 1))
+
+			If(ItemName[Iter] > ItemName[(Iter+1)])
+				TmpForm = ItemList[Iter]
+				TmpName = ItemName[Iter]
+				ItemList[Iter] = ItemList[(Iter+1)]
+				ItemName[Iter] = ItemName[(Iter+1)]
+				ItemList[(Iter+1)] = TmpForm
 				ItemName[(Iter+1)] = TmpName
 				Changed = TRUE
 			EndIf
